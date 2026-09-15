@@ -37,7 +37,11 @@ def main():
     require(re.fullmatch(r'v0\.3\.0-preview\.\d+', tag), 'Expected a 0.3.0 preview tag')
     require(run_id.isdecimal(), 'Invalid run ID')
     base = f'repos/{repository}'
-    release = api(f'{base}/releases/tags/{tag}')
+    # The tag endpoint only returns published releases, so find the draft in the list.
+    releases = json.loads(command('gh', 'api', '--paginate', '--slurp', f'{base}/releases?per_page=100'))
+    matches = [release for page in releases for release in page if release['tag_name'] == tag]
+    require(len(matches) == 1, 'Expected exactly one matching draft release')
+    release = matches[0]
     require(release['draft'] and release['prerelease'], 'Release must be a draft prerelease')
     require(not release['assets'], 'Draft already has assets; inspect before retrying')
     run = api(f'{base}/actions/runs/{run_id}')
