@@ -52,13 +52,13 @@ def main():
     target = release['target_commitish']
     require(re.fullmatch(r'[0-9a-f]{40}', target), 'Draft must target an exact commit')
     subprocess.run(['git', 'merge-base', '--is-ancestor', build_commit, target], check=True)
-    changed = command('git', 'diff', '--name-only', build_commit, target).splitlines()
+    changed = command('git', 'diff', '--name-only', '-z', build_commit, target).split('\0')
     publication_files = {
         'AGENTS.md', 'README.md', 'packaging/THIRD-PARTY.md',
         '.github/workflows/release-assets.yml', 'packaging/prepare_release.py',
     }
     require(all(name in publication_files or name.startswith(('docs/', 'verification/'))
-                for name in changed), 'Application or build inputs changed since the tested commit')
+                for name in changed if name), 'Application or build inputs changed since the tested commit')
 
     installers = {
         'ubuntu-22.04-x11': 'simple-clipboard_0.3.0-preview1_all.deb',
