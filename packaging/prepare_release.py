@@ -75,7 +75,7 @@ def main():
     artifacts = {item['name']: item for item in artifacts}
     expected = {label + '-preview' for label in installers} | {label + '-sources' for label in sources}
     require(expected == artifacts.keys(), 'Missing or unexpected build artifacts')
-    summary = json.loads(Path('verification/phase3-ci-summary.json').read_text())
+    summary = json.loads(Path('verification/ui-ci-summary.json').read_text())
     require(summary['commit'] == build_commit, 'Validation summary refers to a different build')
     summary.update(release_tag=tag, release_commit=target, reports={})
     with tempfile.TemporaryDirectory() as temporary:
