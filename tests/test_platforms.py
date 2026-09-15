@@ -156,7 +156,7 @@ class PlatformTests(unittest.TestCase):
             startup.path.write_text('[Desktop Entry]\nType=Application\nExec="/old/start.sh" --hidden\nX-Clipboard-Managed=true\n')
             self.assertTrue(startup.enabled())
             startup.set_enabled(True)
-            self.assertEqual(startup.path.read_text(), startup.document())
+            self.assertEqual(startup.path.read_text(encoding='utf-8'), startup.document())
             startup.set_enabled(False)
             self.assertFalse(startup.enabled())
 

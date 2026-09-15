@@ -40,11 +40,11 @@ class LinuxAutostart:
     def enabled(self) -> bool:
         if not self.path.is_file():
             return False
-        lines = self.path.read_text().splitlines()
+        lines = self.path.read_text(encoding='utf-8').splitlines()
         return MARKER in lines and 'Hidden=true' not in lines
 
     def set_enabled(self, enabled: bool):
-        if self.path.exists() and MARKER not in self.path.read_text().splitlines():
+        if self.path.exists() and MARKER not in self.path.read_text(encoding='utf-8').splitlines():
             raise ValueError('此自启动文件属于其他配置，未覆盖。')
         if not enabled:
             if self.path.exists():
