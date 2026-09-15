@@ -13,7 +13,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtDBus import QDBusVariant
+if sys.platform.startswith('linux'):
+    from PyQt5.QtDBus import QDBusVariant
 from PyQt5.QtGui import QInputMethodEvent
 from PyQt5.QtNetwork import QLocalSocket
 from PyQt5.QtTest import QSignalSpy, QTest
@@ -38,7 +39,7 @@ def wait_until(condition, timeout=2500):
     return False
 
 
-@unittest.skipUnless(os.environ.get("CLIPBOARD_ISOLATED_TEST") == "1", "Requires isolated X11 desktop")
+@unittest.skipUnless(sys.platform.startswith('linux') and os.environ.get("CLIPBOARD_ISOLATED_TEST") == "1", "Requires isolated X11 desktop")
 class DesktopTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

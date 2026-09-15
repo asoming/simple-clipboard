@@ -1,7 +1,7 @@
 """X11 hotkeys and verified focus restoration. No shell commands or clipboard reads."""
 
 import ctypes as C
-from dataclasses import dataclass
+from .platforms import PlatformUnavailable, Target
 
 from PyQt5.QtCore import QObject, QSocketNotifier, QTimer, pyqtSignal
 
@@ -48,15 +48,7 @@ class ModifierMap(C.Structure):
     _fields_ = [("max_keypermod", C.c_int), ("modifiermap", C.POINTER(C.c_ubyte))]
 
 
-@dataclass(frozen=True)
-class Target:
-    window: int
-    terminal: bool = False
-
-
-class X11Unavailable(RuntimeError):
-    pass
-
+X11Unavailable = PlatformUnavailable
 
 class X11(QObject):
     activated = pyqtSignal()
@@ -87,6 +79,14 @@ class X11(QObject):
         self.paste_timer = QTimer(self)
         self.paste_timer.setInterval(30)
         self.paste_timer.timeout.connect(self._finish_paste)
+
+    default_shortcut = "Ctrl+Alt+V"
+
+    def window_id(self, panel):
+        return int(panel.winId())
+
+    def permission_message(self):
+        return ""
 
     def _bind(self):
         d, w, i, u = C.c_void_p, C.c_ulong, C.c_int, C.c_uint

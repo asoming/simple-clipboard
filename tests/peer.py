@@ -8,7 +8,7 @@ from PyQt5.QtNetwork import QLocalServer
 from PyQt5.QtGui import QColor, QImage, QTextCharFormat
 from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QVBoxLayout, QWidget
 
-from clipboard_app.x11 import Target, X11
+from clipboard_app.platforms import Target, create_backend
 
 app = QApplication([])
 window = QWidget()
@@ -22,7 +22,7 @@ layout.addWidget(chat)
 submissions = []
 chat.returnPressed.connect(lambda: submissions.append(chat.text()))
 window.show()
-backend = X11()
+backend = create_backend()
 server = QLocalServer()
 QLocalServer.removeServer(sys.argv[1])
 assert server.listen(sys.argv[1])
@@ -60,8 +60,10 @@ def connect():
             edit.setCurrentCharFormat(QTextCharFormat())
             chat.setText("")
             (chat if request.get("chat") else edit).setFocus()
-            backend.activate(Target(int(window.winId())))
-            result = {"window": int(window.winId())}
+            window.raise_()
+            window.activateWindow()
+            backend.activate(Target(backend.window_id(window)))
+            result = {"window": backend.window_id(window)}
         elif action == "read":
             result = {"text": edit.toPlainText(), "html": edit.toHtml(), "chat": chat.text(), "submissions": submissions}
         elif action == "clipboard":

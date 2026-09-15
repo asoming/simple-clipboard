@@ -1,13 +1,18 @@
-"""Opt-in desktop startup and a read-only GNOME appearance observer."""
+"""Opt-in startup and system appearance on each supported desktop."""
 
 import os
+import plistlib
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
-from PyQt5.QtDBus import QDBus, QDBusConnection, QDBusMessage, QDBusVariant
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QApplication
+
+
+from .paths import launch_arguments
 
 
 MARKER = 'X-Clipboard-Managed=true'
@@ -21,15 +26,14 @@ def exec_argument(value: str) -> str:
     return '"' + escaped.replace('\\', '\\\\').replace('%', '%%') + '"'
 
 
-class Autostart:
+class LinuxAutostart:
     def __init__(self, data_dir: Path, config_dir: Path | None = None):
         directory = config_dir or Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
         self.path = directory / 'autostart' / 'codex-clipboard.desktop'
         self.data_dir = data_dir.resolve()
 
     def document(self) -> str:
-        launcher = Path(__file__).resolve().parents[1] / 'start.sh'
-        command = f'{exec_argument(str(launcher))} --hidden --data-dir {exec_argument(str(self.data_dir))}'
+        command = ' '.join(exec_argument(arg) for arg in launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)])
         return ('[Desktop Entry]\nType=Application\nName=剪贴板\n'
                 f'Exec={command}\nTerminal=false\n{MARKER}\n')
 
@@ -55,40 +59,117 @@ class Autostart:
                 temporary.unlink(missing_ok=True)
 
 
-class Appearance(QObject):
+class MacAutostart:
+    label = 'io.github.asoming.simpleclipboard'
+
+    def __init__(self, data_dir, config_dir=None):
+        self.data_dir = data_dir.resolve()
+        directory = Path.home() / 'Library' / 'LaunchAgents' if config_dir is None else config_dir
+        self.path = directory / (self.label + '.plist')
+
+    def document(self):
+        return {'Label': self.label, 'ProgramArguments': launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)], 'RunAtLoad': True}
+
+    def enabled(self):
+        if not self.path.exists():
+            return False
+        return self.read_document() == self.document()
+
+    def read_document(self):
+        try:
+            document = plistlib.loads(self.path.read_bytes())
+            if not isinstance(document, dict):
+                raise ValueError('启动项格式不正确，未修改。')
+            return document
+        except plistlib.InvalidFileException as error:
+            raise ValueError('启动项格式不正确，未修改。') from error
+
+    def set_enabled(self, enabled):
+        if self.path.exists() and self.read_document().get('Label') != self.label:
+            raise ValueError('此启动项不属于剪贴板，未覆盖。')
+        if not enabled:
+            self.path.unlink(missing_ok=True)
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=self.path.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(plistlib.dumps(self.document()))
+            temporary.replace(self.path)
+        finally:
+            if temporary:
+                temporary.unlink(missing_ok=True)
+
+
+class WindowsAutostart:
+    value_name = 'AsomingSimpleClipboard'
+
+    def __init__(self, data_dir, registry_key=None):
+        import winreg
+        self.registry = winreg
+        self.data_dir = data_dir.resolve()
+        self.key = registry_key or r'Software\Microsoft\Windows\CurrentVersion\Run'
+
+    def document(self):
+        return subprocess.list2cmdline(launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)])
+
+    def enabled(self):
+        r = self.registry
+        try:
+            with r.OpenKey(r.HKEY_CURRENT_USER, self.key) as key:
+                value, kind = r.QueryValueEx(key, self.value_name)
+                return kind == r.REG_SZ and value == self.document()
+        except FileNotFoundError:
+            return False
+
+    def set_enabled(self, enabled):
+        r = self.registry
+        if enabled:
+            with r.CreateKeyEx(r.HKEY_CURRENT_USER, self.key, 0, r.KEY_SET_VALUE) as key:
+                r.SetValueEx(key, self.value_name, 0, r.REG_SZ, self.document())
+        else:
+            try:
+                with r.OpenKey(r.HKEY_CURRENT_USER, self.key, 0, r.KEY_SET_VALUE) as key:
+                    r.DeleteValue(key, self.value_name)
+            except FileNotFoundError:
+                pass
+
+
+class SystemAppearance(QObject):
     changed = pyqtSignal()
-    service = 'org.freedesktop.portal.Desktop'
-    path = '/org/freedesktop/portal/desktop'
-    interface = 'org.freedesktop.portal.Settings'
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.scheme = 0
-        self.bus = QDBusConnection.sessionBus()
-        message = QDBusMessage.createMethodCall(self.service, self.path, self.interface, 'Read')
-        message.setArguments(['org.freedesktop.appearance', 'color-scheme'])
-        reply = self.bus.call(message, QDBus.Block, 500)
-        if reply.type() == QDBusMessage.ReplyMessage and reply.arguments():
-            self.scheme = self.unwrap(reply.arguments()[0])
-        self.bus.connect(self.service, self.path, self.interface, 'SettingChanged', self.on_setting)
         QApplication.instance().paletteChanged.connect(self.changed)
-
-    @staticmethod
-    def unwrap(value):
-        while isinstance(value, QDBusVariant):
-            value = value.variant()
-        return value if value in (0, 1, 2) else 0
+        self.last_dark = self.dark
+        self.timer = QTimer(self)
+        self.timer.setInterval(2000)
+        self.timer.timeout.connect(self.check)
+        if sys.platform == 'win32':
+            self.timer.start()
 
     @property
     def dark(self):
-        if self.scheme:
-            return self.scheme == 1
+        if sys.platform == 'win32':
+            import winreg
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize') as key:
+                    return not bool(winreg.QueryValueEx(key, 'AppsUseLightTheme')[0])
+            except OSError:
+                pass
         return QApplication.palette().color(QPalette.Window).lightness() < 128
 
-    @pyqtSlot(str, str, QDBusVariant)
-    def on_setting(self, namespace, key, value):
-        if namespace == 'org.freedesktop.appearance' and key == 'color-scheme':
-            scheme = self.unwrap(value)
-            if scheme != self.scheme:
-                self.scheme = scheme
-                self.changed.emit()
+    def check(self):
+        dark = self.dark
+        if dark != self.last_dark:
+            self.last_dark = dark
+            self.changed.emit()
+
+
+if sys.platform.startswith('linux'):
+    from .appearance_linux import Appearance
+    Autostart = LinuxAutostart
+else:
+    Appearance = SystemAppearance
+    Autostart = WindowsAutostart if sys.platform == 'win32' else MacAutostart

@@ -1,10 +1,11 @@
 """External clipboard observation with bounded, cancellable image processing."""
 
 import sqlite3
+import sys
 import time
 from collections import deque
 
-from PyQt5.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt5.QtCore import QObject, QRunnable, QThreadPool, QTimer, pyqtSignal
 from PyQt5.QtGui import QClipboard
 
 from .content import as_mime, prepare, snapshot
@@ -45,6 +46,18 @@ class Monitor(QObject):
         self.paused = bool(store.setting("paused", False))
         self.ignore_next = False
         self._writing = False
+        self._stopped = False
+        self.sequence = None
+        self.last_sequence = None
+        self.poll_timer = QTimer(self)
+        if sys.platform == 'darwin':
+            from AppKit import NSPasteboard
+            pasteboard = NSPasteboard.generalPasteboard()
+            self.sequence = pasteboard.changeCount
+            self.last_sequence = self.sequence()
+            self.poll_timer.setInterval(150)
+            self.poll_timer.timeout.connect(lambda: self._changed(QClipboard.Clipboard))
+            self.poll_timer.start()
         self.generation = 0
         self.processing = False
         self.queue = deque()
@@ -63,6 +76,8 @@ class Monitor(QObject):
     def pause(self, value: bool):
         self.store.set_setting("paused", value)
         self.paused = value
+        if self.sequence:
+            self.last_sequence = self.sequence()
         self.ignore_next = False
         self.cancel_pending()
         self.state_changed.emit()
@@ -73,6 +88,11 @@ class Monitor(QObject):
             self.state_changed.emit()
 
     def _changed(self, mode):
+        if self.sequence and mode == QClipboard.Clipboard:
+            current = self.sequence()
+            if current == self.last_sequence:
+                return
+            self.last_sequence = current
         if mode != QClipboard.Clipboard or self._writing or self.clipboard.ownsClipboard() or self.paused:
             return
         mime = self.clipboard.mimeData()
@@ -136,6 +156,8 @@ class Monitor(QObject):
             self.clipboard.setMimeData(as_mime(content, plain))
         finally:
             self._writing = False
+            if self.sequence:
+                self.last_sequence = self.sequence()
 
     def clear_current(self):
         self._writing = True
@@ -143,8 +165,14 @@ class Monitor(QObject):
             self.clipboard.clear()
         finally:
             self._writing = False
+            if self.sequence:
+                self.last_sequence = self.sequence()
 
     def stop(self):
+        if self._stopped:
+            return
+        self._stopped = True
+        self.poll_timer.stop()
         self.cancel_pending()
         self.clipboard.changed.disconnect(self._changed)
         self.signals.ready.disconnect(self._ready)

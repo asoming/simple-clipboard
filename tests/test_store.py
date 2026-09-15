@@ -1,4 +1,5 @@
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 
@@ -112,7 +113,8 @@ class HistoryTests(unittest.TestCase):
         clip_id = self.store.add("private")
         self.store.delete(clip_id)
         self.assertIsNone(self.store.get(clip_id))
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        if sys.platform != 'win32':
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == "__main__":

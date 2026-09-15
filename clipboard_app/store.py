@@ -224,6 +224,12 @@ class Store:
             self.db.execute("DELETE FROM clips" + ("" if include_favorites else " WHERE pinned=0"))
         self.db.execute("VACUUM")
 
+    def reset(self):
+        with self.db:
+            self.db.execute('DELETE FROM clips')
+            self.db.execute('DELETE FROM settings')
+        self.db.execute('VACUUM')
+
     def _prune(self):
         self.db.execute("DELETE FROM clips WHERE pinned=0 AND copied_at < ?", (self.clock() - self.limits.days * 86400,))
         self.db.execute("""DELETE FROM clips WHERE id IN (

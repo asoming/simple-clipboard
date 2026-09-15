@@ -27,3 +27,6 @@ htmlcov/
 
 # Superseded phase-one screenshot
 preview.png
+build/
+dist/
+sources/

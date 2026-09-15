@@ -182,6 +182,7 @@ class PhaseTwoTests(unittest.TestCase):
             db.execute('ALTER TABLE clips DROP COLUMN width')
         self.store = Store(self.path)
 
+    @unittest.skipUnless(__import__('sys').platform.startswith('linux'), 'Linux desktop-entry integration')
     def test_autostart_is_opt_in_quotes_path_and_preserves_unrelated_file(self):
         from gi.repository import Gio
         startup = Autostart(Path(self.temp.name) / '空 格 "quote" $ `tick` % folder', Path(self.temp.name))
@@ -195,7 +196,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertTrue(valid)
         # Percent field codes are expanded by desktop launchers, not shell_parse_argv.
         self.assertEqual(argv[-1].replace('%%', '%'), str(startup.data_dir))
-        self.assertEqual(argv[1:3], ['--hidden', '--data-dir'])
+        self.assertEqual(argv[-3:-1], ['--hidden', '--data-dir'])
         startup.set_enabled(False)
         self.assertFalse(startup.path.exists())
         startup.path.write_text('[Desktop Entry]\nName=Other\n')

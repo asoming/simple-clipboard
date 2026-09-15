@@ -1,5 +1,6 @@
 """One quiet panel: search, history, and explicit actions."""
 
+import sys
 import time
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from PyQt5.QtWidgets import (
 
 from .monitor import Monitor
 from .preferences import Appearance, Autostart
+from .platforms import Target
 from .store import Clip, Limits, Store
 
 
@@ -140,7 +142,7 @@ class Panel(QWidget):
         self.kind = "all"
         self.appearance = Appearance(self)
         self.autostart = Autostart(store.path.parent)
-        self.shortcut = store.setting("shortcut", "Ctrl+Alt+V")
+        self.shortcut = store.setting("shortcut", backend.default_shortcut if backend else "Ctrl+Alt+V")
         self.shortcut_error = ""
         self.pending_notice = ""
         self.setWindowTitle("剪贴板")
@@ -196,6 +198,8 @@ class Panel(QWidget):
         self.menu.addSeparator()
         self.menu.addAction("设置…", self.settings)
         self.menu.addAction("保存与隐私…", self.privacy)
+        if self.backend and hasattr(self.backend, "open_permissions"):
+            self.menu.addAction("自动粘贴权限…", self.backend.open_permissions)
         self.menu.addAction("清空历史…", self.clear_history)
         self.menu.addSeparator()
         self.menu.addAction("退出", QApplication.instance().quit)
@@ -270,7 +274,7 @@ class Panel(QWidget):
         self.notice.setObjectName("notice")
         self.notice.hide()
         root.addWidget(self.notice)
-        self.hint = QLabel("↑↓ 选择    Enter 粘贴    Ctrl+Enter 仅复制    Esc 关闭")
+        self.hint = QLabel("↑↓ 选择    Enter 粘贴    " + ("⌘" if sys.platform == "darwin" else "Ctrl+") + "Enter 仅复制    Esc 关闭")
         self.hint.setObjectName("hint")
         root.addWidget(self.hint)
         self.search.textChanged.connect(self.refresh)
@@ -451,7 +455,7 @@ class Panel(QWidget):
     def open_panel(self):
         if not self.isVisible() and self.backend:
             target = self.backend.capture_target()
-            self.target = target if target and target.window != int(self.winId()) else None
+            self.target = target if target and target.window != self.backend.window_id(self) else None
         self.store.prune()
         self.search.blockSignals(True)
         self.search.clear()
@@ -471,9 +475,8 @@ class Panel(QWidget):
         self.activateWindow()
         self.search.setFocus()
         if self.backend:
-            from .x11 import Target
             QApplication.sync()
-            self.backend.activate(Target(int(self.winId())))
+            self.backend.activate(Target(self.backend.window_id(self)))
 
     def toggle(self):
         if self.isVisible():
@@ -631,7 +634,7 @@ class Panel(QWidget):
         if self.backend is None:
             self.show_notice("当前模式不支持全局快捷键。")
             return
-        value, accepted = QInputDialog.getText(self, "设置快捷键", "例如 Ctrl+Alt+V 或 Super+V", text=self.shortcut)
+        value, accepted = QInputDialog.getText(self, "设置快捷键", f"例如 {self.backend.default_shortcut}", text=self.shortcut)
         if not accepted:
             return
         value = value.strip()
@@ -676,7 +679,7 @@ class Panel(QWidget):
         startup = QCheckBox("登录桌面后在后台启动")
         try:
             startup.setChecked(self.autostart.enabled())
-        except OSError:
+        except (OSError, ValueError):
             startup.setEnabled(False)
             startup.setToolTip("无法读取系统自启动目录。")
         form.addRow("启动", startup)
@@ -730,6 +733,7 @@ class Panel(QWidget):
             f"普通历史：{self.store.limits.days} 天，最多 {self.store.limits.count} 条。\n"
             f"收藏不自动清理；总容量 {self.store.limits.total_bytes / 1048576:g} MiB，单条 {self.store.limits.item_bytes / 1048576:g} MiB。\n"
             f"当前内容占用：{mb:.2f} MiB（不含数据库额外空间）。\n\n"
+            f"数据目录：{self.store.path.parent}\n卸载应用默认保留历史；可先在清空历史中删除全部收藏并重置设置。\n\n"
             "可通过菜单暂停记录、忽略下一次复制或清空历史。\n"
             "支持文本、静态图片及 HTML；不记录文件，不识别图片中的文字。\n"
             "带支持的密码标记的内容会跳过，但来源应用不一定提供标记。\n"
@@ -743,8 +747,11 @@ class Panel(QWidget):
         layout.addWidget(QLabel("删除后无法恢复。默认保留收藏。"))
         favorites = QCheckBox("同时删除全部收藏")
         current = QCheckBox("同时清空系统当前剪贴板")
+        reset = QCheckBox("同时重置设置、关闭自启动并退出")
+        reset.toggled.connect(lambda checked: (favorites.setChecked(True) if checked else None, favorites.setEnabled(not checked)))
         layout.addWidget(favorites)
         layout.addWidget(current)
+        layout.addWidget(reset)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("清空")
         buttons.button(QDialogButtonBox.Cancel).setText("取消")
@@ -752,11 +759,25 @@ class Panel(QWidget):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec_() == QDialog.Accepted:
+            if reset.isChecked():
+                try:
+                    self.autostart.set_enabled(False)
+                except (OSError, ValueError):
+                    self.show_notice("无法关闭自启动，尚未清空。请检查系统启动项后重试。")
+                    dialog.deleteLater()
+                    return
             self.monitor.cancel_pending()
-            self.store.clear(favorites.isChecked())
+            if reset.isChecked():
+                self.store.reset()
+                self.monitor.stop()
+                self.cleanup_timer.stop()
+            else:
+                self.store.clear(favorites.isChecked())
             if current.isChecked():
                 self.monitor.clear_current()
             self.refresh()
+            if reset.isChecked():
+                QApplication.instance().quit()
 
         dialog.deleteLater()
 

@@ -13,15 +13,19 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 from .monitor import Monitor
 from .input_method import prepare_input_method
 from .instance import InstanceLock
+from .migration import import_history
+from .paths import default_data_dir, instance_socket
+from .platforms import create_backend, PlatformUnavailable
 from .store import Store
 from .ui import Panel, app_icon
-from .x11 import X11, X11Unavailable
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="简洁的本地剪贴板管理器")
-    parser.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[1] / "data")
+    parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--hidden", action="store_true", help="在后台启动，通过快捷键打开")
+    parser.add_argument("--import-history", type=Path, help="退出旧版后，将数据库导入空历史目录；原文件保留")
+    parser.add_argument("--smoke-test", type=Path, metavar="REPORT", help="使用临时数据检查启动，将结果写入报告；不监听剪贴板")
     args = parser.parse_args()
     os.umask(0o077)
     prepare_input_method()
@@ -31,11 +35,17 @@ def main() -> int:
     app.setApplicationDisplayName("剪贴板")
     app.setWindowIcon(app_icon())
     app.setQuitOnLastWindowClosed(False)
-    data_dir = args.data_dir.resolve()
+    if args.smoke_test:
+        from .smoke import run
+        return run(app, args.smoke_test)
+    data_dir = (args.data_dir or default_data_dir()).resolve()
     data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     lock = InstanceLock(data_dir / "instance.lock")
-    socket_name = str(data_dir / "instance.sock")
+    socket_name = instance_socket(data_dir)
     if not lock.acquire():
+        if args.import_history:
+            QMessageBox.warning(None, "无法导入", "请先退出当前版本，再导入旧历史。")
+            return 1
         socket = QLocalSocket()
         socket.connectToServer(socket_name)
         if socket.waitForConnected(1000):
@@ -46,13 +56,16 @@ def main() -> int:
         QMessageBox.warning(None, "剪贴板", "应用已在运行或上一次仍未退出，请稍后重试。")
         return 1
     backend = None
+    store = None
     try:
+        if args.import_history:
+            import_history(args.import_history, data_dir / "history.sqlite3")
         store = Store(data_dir / "history.sqlite3")
-        if os.environ.get("XDG_SESSION_TYPE") == "wayland":
-            raise X11Unavailable("当前版本仅支持 X11。请在登录界面选择 Ubuntu on Xorg 后运行。")
-        backend = X11()
-    except (OSError, sqlite3.Error, ValueError, X11Unavailable) as error:
+        backend = create_backend()
+    except (OSError, sqlite3.Error, ValueError, PlatformUnavailable) as error:
         QMessageBox.critical(None, "无法启动剪贴板", str(error))
+        if store:
+            store.close()
         lock.release()
         return 1
     monitor = Monitor(app.clipboard(), store)
@@ -76,7 +89,8 @@ def main() -> int:
 
     def report_error(error_type, error, traceback):
         # Do not print exception values or locals: clipboard content is private.
-        print(f"Clipboard operation failed: {error_type.__name__}", file=sys.stderr)
+        if sys.stderr is not None:
+            print(f"Clipboard operation failed: {error_type.__name__}", file=sys.stderr)
         panel.show_notice("操作未完成，请检查存储空间并重试。已有历史不会被自动重建。")
 
     sys.excepthook = report_error
