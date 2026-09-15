@@ -80,6 +80,8 @@ jobs:
           if (!(Get-Content $report | ConvertFrom-Json).ok) { throw 'Smoke report failed' }
           & 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe' packaging/windows.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          python packaging/verify_windows_install.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installer lifecycle test failed' }
       - name: Verify macOS application and create disk image
         if: runner.os == 'macOS'
         run: |
@@ -89,6 +91,11 @@ jobs:
           cp -R dist/SimpleClipboard.app build/dmg/
           ln -s /Applications build/dmg/Applications
           hdiutil create -volname 'Simple Clipboard Preview' -srcfolder build/dmg -ov -format UDZO 'dist/SimpleClipboard-0.3.0-preview-${{ matrix.label }}.dmg'
+          mkdir -p build/mounted build/installed
+          hdiutil attach -nobrowse -mountpoint "$PWD/build/mounted" 'dist/SimpleClipboard-0.3.0-preview-${{ matrix.label }}.dmg'
+          cp -R build/mounted/SimpleClipboard.app build/installed/
+          hdiutil detach "$PWD/build/mounted"
+          build/installed/SimpleClipboard.app/Contents/MacOS/SimpleClipboard --smoke-test "$PWD/dist/macos-installed-smoke.json"
       - name: Upload corresponding sources
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -103,5 +110,5 @@ jobs:
           path: |
             dist/*-setup.exe
             dist/*.dmg
-            dist/*-smoke.json
+            dist/*.json
           retention-days: 14

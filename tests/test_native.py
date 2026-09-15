@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import QApplication
 
 from clipboard_app.monitor import Monitor
 from clipboard_app.platforms import create_backend
-from clipboard_app.store import Store
+from clipboard_app.store import Content, Store
 from clipboard_app.ui import Panel
 
 app = QApplication.instance() or QApplication([])
@@ -154,6 +154,28 @@ class NativeDesktopTests(unittest.TestCase):
                 self.assertEqual(len(failed), 1)
                 send.assert_not_called()
         self.assertEqual(self.peer_call('clipboard')['text'], 'manual paste')
+
+    def test_native_html_plain_text_and_image_reach_editor(self):
+        if self.backend.permission_message():
+            self.skipTest('Accessibility is not granted; native payload delivery needs manual verification')
+        from clipboard_app.content import Snapshot, prepare
+        from PyQt5.QtGui import QImage, QColor
+        for plain in (False, True):
+            window = self.peer_call('focus')['window']
+            self.assertTrue(wait_until(lambda: self.backend.focus() == window))
+            target = self.backend.capture_target()
+            self.monitor.copy(Content(text='格式中文', html='<b>格式中文</b>'), plain=plain)
+            self.backend.paste(target)
+            self.assertTrue(wait_until(lambda: self.peer_call('read')['text'] == '格式中文'))
+            self.assertEqual('font-weight:600' in self.peer_call('read')['html'], not plain)
+        window = self.peer_call('focus')['window']
+        self.assertTrue(wait_until(lambda: self.backend.focus() == window))
+        target = self.backend.capture_target()
+        image = QImage(40, 30, QImage.Format_ARGB32)
+        image.fill(QColor('#47617e'))
+        self.monitor.copy(prepare(Snapshot(image=image), 1048576))
+        self.backend.paste(target)
+        self.assertTrue(wait_until(lambda: '<img' in self.peer_call('read')['html']))
 
     def test_windows_hotkey_event_arrives(self):
         if sys.platform != 'win32':

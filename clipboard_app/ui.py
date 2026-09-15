@@ -7,7 +7,7 @@ from datetime import datetime
 from PyQt5.QtCore import QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QShortcut, QSpinBox, QStackedWidget,
     QStyle, QStyledItemDelegate, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
@@ -131,6 +131,8 @@ class HistoryDelegate(QStyledItemDelegate):
 
 
 class Panel(QWidget):
+    import_requested = pyqtSignal(str)
+
     def __init__(self, store: Store, monitor: Monitor, backend=None):
         super().__init__()
         self.store = store
@@ -145,6 +147,7 @@ class Panel(QWidget):
         self.shortcut = store.setting("shortcut", backend.default_shortcut if backend else "Ctrl+Alt+V")
         self.shortcut_error = ""
         self.pending_notice = ""
+        self.resetting = False
         self.setWindowTitle("剪贴板")
         self.setWindowIcon(app_icon())
         self.setMinimumSize(440, 460)
@@ -198,6 +201,7 @@ class Panel(QWidget):
         self.menu.addSeparator()
         self.menu.addAction("设置…", self.settings)
         self.menu.addAction("保存与隐私…", self.privacy)
+        self.menu.addAction("从旧版导入…", self.import_old_history)
         if self.backend and hasattr(self.backend, "open_permissions"):
             self.menu.addAction("自动粘贴权限…", self.backend.open_permissions)
         self.menu.addAction("清空历史…", self.clear_history)
@@ -492,6 +496,9 @@ class Panel(QWidget):
             self.backend.activate(self.target)
 
     def closeEvent(self, event):
+        if self.resetting:
+            event.accept()
+            return
         # With no tray AND no working hotkey, hiding would make the app inaccessible.
         if not self.tray.isVisible() and (self.backend is None or self.shortcut_error):
             QApplication.instance().quit()
@@ -740,6 +747,17 @@ class Panel(QWidget):
             "本地历史未加密，无法识别所有密码；复制敏感内容前请暂停。"
         ))
 
+    def import_old_history(self):
+        if self.store.summaries():
+            self.show_notice("当前历史不为空，无法覆盖导入。旧版与当前历史可分别保留在各自的数据目录。")
+            return
+        filename, _ = QFileDialog.getOpenFileName(self, "选择旧版 history.sqlite3", "", "剪贴板历史 (*.sqlite3)")
+        if not filename:
+            return
+        answer = QMessageBox.question(self, "导入旧版历史", "请先退出旧版。应用将重启，校验后导入历史及设置；旧文件保留不变。\n当前空历史的设置会被替换，过期的普通记录仍按旧版保存规则清理。", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer == QMessageBox.Yes:
+            self.import_requested.emit(filename)
+
     def clear_history(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("清空历史")
@@ -777,6 +795,7 @@ class Panel(QWidget):
                 self.monitor.clear_current()
             self.refresh()
             if reset.isChecked():
+                self.resetting = True
                 QApplication.instance().quit()
 
         dialog.deleteLater()

@@ -6,7 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QProcess, Qt
 from PyQt5.QtNetwork import QLocalServer, QLocalSocket
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
@@ -14,7 +14,7 @@ from .monitor import Monitor
 from .input_method import prepare_input_method
 from .instance import InstanceLock
 from .migration import import_history
-from .paths import default_data_dir, instance_socket
+from .paths import default_data_dir, instance_socket, launch_arguments
 from .platforms import create_backend, PlatformUnavailable
 from .store import Store
 from .ui import Panel, app_icon
@@ -70,6 +70,14 @@ def main() -> int:
         return 1
     monitor = Monitor(app.clipboard(), store)
     panel = Panel(store, monitor, backend)
+    import_path = None
+
+    def restart_for_import(filename):
+        nonlocal import_path
+        import_path = filename
+        app.quit()
+
+    panel.import_requested.connect(restart_for_import)
     QLocalServer.removeServer(socket_name)
     server = QLocalServer(app)
     server.setSocketOptions(QLocalServer.UserAccessOption)
@@ -101,6 +109,12 @@ def main() -> int:
         backend.close()
     store.close()
     lock.release()
+    if import_path:
+        command = launch_arguments() + ['--data-dir', str(data_dir), '--import-history', import_path]
+        started, _ = QProcess.startDetached(command[0], command[1:])
+        if not started:
+            QMessageBox.critical(None, '无法重启', '未能重新打开应用。历史未修改，请手动启动后重试导入。')
+            return 1
     return result
 
 
