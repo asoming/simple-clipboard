@@ -463,6 +463,11 @@ class Panel(QWidget):
         self.setStyleSheet(stylesheet)
         self.ensurePolished()
         self._fit_paste_mode()
+        # Even the smallest window must fit one two-line record and its caption.
+        body_height = self.history.fontMetrics().height() + 2
+        caption_font = HistoryDelegate.caption_font(self.history.font())
+        caption_height = QFontMetrics(caption_font).height() + 2
+        self.stack.setMinimumHeight(18 + 2 * body_height + 5 + caption_height + 8)
         self.history.doItemsLayout()
 
     def _tray(self):

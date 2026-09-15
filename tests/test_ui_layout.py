@@ -44,12 +44,14 @@ class LayoutTests(unittest.TestCase):
                         store.set_setting('intro_seen', True)
                         store.set_setting('theme', theme)
                         clip = store.add('中文与 English 🧑‍💻 混合的长摘要。' * 8)
-                        store.favorite(clip, True, '用于测试取消收藏按钮')
+                        store.favorite(clip, True)
                         panel = Panel(store, PreviewMonitor())
                         try:
                             panel.resize(440, 460)
                             panel.show()
                             app.processEvents()
+                            self.assertGreaterEqual(panel.history.viewport().height(),
+                                                    panel.history.visualItemRect(panel.history.item(0)).height() + 4)
                             for mode in (0, 1):
                                 panel.paste_mode.setCurrentIndex(mode)
                                 app.processEvents()
