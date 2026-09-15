@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PyQt5.QtCore import QT_VERSION_STR, PYQT_VERSION_STR
+from PyQt5.QtCore import QT_VERSION_STR, PYQT_VERSION_STR, qVersion
 
 from . import __version__
 from .instance import InstanceLock
@@ -18,7 +18,8 @@ from .ui import SearchEdit
 def run(app, report):
     backend = None
     result = {'version': __version__, 'system': platform.system(), 'machine': platform.machine(),
-              'python': platform.python_version(), 'qt': QT_VERSION_STR, 'pyqt': PYQT_VERSION_STR,
+              'python': platform.python_version(), 'qt': qVersion(), 'qt_build': QT_VERSION_STR,
+              'pyqt': PYQT_VERSION_STR,
               'frozen': bool(getattr(sys, 'frozen', False))}
     try:
         with tempfile.TemporaryDirectory() as directory:
