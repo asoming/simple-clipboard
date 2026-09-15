@@ -52,6 +52,7 @@ class LayoutTests(unittest.TestCase):
                             app.processEvents()
                             self.assertGreaterEqual(panel.history.viewport().height(),
                                                     panel.history.visualItemRect(panel.history.item(0)).height() + 4)
+                            self.assertLess(panel.stack.geometry().bottom(), panel.preview_button.geometry().top())
                             for mode in (0, 1):
                                 panel.paste_mode.setCurrentIndex(mode)
                                 app.processEvents()

@@ -8,7 +8,7 @@ from PyQt5.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QTextLayout, QTextOption
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
+    QInputDialog, QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QShortcut, QSpinBox, QStackedWidget,
     QFrame, QSizePolicy, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
@@ -240,6 +240,7 @@ class Panel(QWidget):
 
     def _build(self):
         root = QVBoxLayout(self)
+        root.setSizeConstraint(QLayout.SetMinimumSize)
         root.setContentsMargins(20, 16, 20, 14)
         root.setSpacing(12)
         header = QHBoxLayout()
