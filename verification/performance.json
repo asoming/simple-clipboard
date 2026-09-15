@@ -1,0 +1,29 @@
+{
+  "dataset": "500 mixed entries: 250 text (~750 B), 150 HTML, 100 seeded noise PNG images (320x200)",
+  "render_backend": "Xephyr X11; includes global shortcut and Qt focus, excludes GNOME compositor latency",
+  "hotkey_to_search_focus": {
+    "p50_ms": 80.29,
+    "p95_ms": 93.11
+  },
+  "open_panel": {
+    "p50_ms": 66.46,
+    "p95_ms": 77.91
+  },
+  "search": {
+    "p50_ms": 1.47,
+    "p95_ms": 4.85
+  },
+  "idle_cpu_percent_one_core": 1.52,
+  "process_peak_rss_before_large_import_mib": 160.25,
+  "process_peak_rss_after_large_import_mib": 272.49,
+  "payload_bytes": 27884972,
+  "database_bytes": 28487680,
+  "large_image_import_3840x2160_solid": {
+    "total_ms": 350.05,
+    "largest_gui_tick_gap_ms": 108.09
+  },
+  "large_text_import_8mib": {
+    "total_ms": 131.27,
+    "largest_gui_tick_gap_ms": 131.32
+  }
+}

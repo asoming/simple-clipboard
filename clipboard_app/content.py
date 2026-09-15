@@ -1,0 +1,118 @@
+"""Capture on the GUI thread; decode and normalize raster images in a worker."""
+
+from dataclasses import dataclass
+
+from PyQt5.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, Qt
+from PyQt5.QtGui import QImage, QImageReader, QPixmap, QTextDocument
+
+from .store import CapacityError, Content
+
+MAX_PIXELS = 24_000_000
+MAX_SIDE = 16000
+RASTER_TYPES = ("image/png", "image/jpeg", "image/webp", "image/bmp", "image/tiff")
+SECRET_TYPES = {"x-kde-passwordManagerHint", "org.nspasteboard.ConcealedType",
+                "org.nspasteboard.TransientType", "application/x-keepassxc-secret"}
+FILE_TYPES = {"application/x-kde-cutselection", "x-special/gnome-copied-files"}
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    text: str = ""
+    html: str = ""
+    image: bytes | QImage = b""
+
+
+def snapshot(mime: QMimeData, limit: int) -> Snapshot | None:
+    formats = set(mime.formats())
+    if formats & (SECRET_TYPES | FILE_TYPES):
+        return None
+    if mime.hasUrls() and any(url.isLocalFile() for url in mime.urls()):
+        return None
+    for image_type in RASTER_TYPES:
+        if image_type in formats:
+            data = bytes(mime.data(image_type))
+            if len(data) > limit:
+                raise CapacityError("图片超过单条保存上限，已跳过。可在设置中调整。")
+            return Snapshot(image=data)
+    if mime.hasImage():
+        image = mime.imageData()
+        if isinstance(image, QPixmap):
+            image = image.toImage()
+        if isinstance(image, QImage) and not image.isNull():
+            check_dimensions(image.width(), image.height())
+            return Snapshot(image=QImage(image))
+    if not mime.hasText() and not mime.hasHtml():
+        return None
+    text = mime.text() if mime.hasText() else ""
+    html = mime.html() if mime.hasHtml() else ""
+    if len(text.encode("utf-8")) + len(html.encode("utf-8")) > limit:
+        raise CapacityError("文本及原格式超过单条保存上限，已跳过。")
+    return Snapshot(text, html) if text or html else None
+
+
+def check_dimensions(width: int, height: int):
+    if width <= 0 or height <= 0:
+        raise ValueError("无法读取这张图片，已跳过。")
+    if width > MAX_SIDE or height > MAX_SIDE or width * height > MAX_PIXELS:
+        raise CapacityError("图片分辨率过大，已跳过。当前支持最多 2400 万像素。")
+
+
+def png_bytes(image: QImage) -> bytes:
+    buffer = QBuffer()
+    buffer.open(QIODevice.WriteOnly)
+    if not image.save(buffer, "PNG"):
+        raise ValueError("无法保存这张图片，已跳过。")
+    return bytes(buffer.data())
+
+
+def prepare(value: Snapshot, limit: int) -> Content:
+    if isinstance(value.image, QImage) or value.image:
+        if isinstance(value.image, QImage):
+            image = value.image
+        else:
+            buffer = QBuffer()
+            buffer.setData(QByteArray(value.image))
+            buffer.open(QIODevice.ReadOnly)
+            reader = QImageReader(buffer)
+            reader.setAutoTransform(True)
+            dimensions = reader.size()
+            check_dimensions(dimensions.width(), dimensions.height())
+            image = reader.read()
+        if image.isNull():
+            raise ValueError("图片格式损坏或暂不支持，已跳过。")
+        check_dimensions(image.width(), image.height())
+        image = image.convertToFormat(QImage.Format_ARGB32)
+        # Copy pixels into a fresh image to drop author/DPI metadata. Preserve the
+        # color profile because it affects how those pixels should be displayed.
+        canonical = QImage(image.constBits(), image.width(), image.height(), image.bytesPerLine(), image.format()).copy()
+        canonical.setColorSpace(image.colorSpace())
+        image = canonical
+        data = png_bytes(image)
+        thumb = png_bytes(image.scaled(160, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        result = Content(image=data, thumbnail=thumb, width=image.width(), height=image.height())
+    else:
+        text = value.text
+        if not text and value.html:
+            document = QTextDocument()
+            document.setHtml(value.html)
+            text = document.toPlainText()
+        result = Content(text=text, html=value.html)
+    if result.size > limit:
+        raise CapacityError("转换后的内容超过保存上限，已跳过。可在设置中调整。")
+    return result
+
+
+def as_mime(content: Content, plain: bool = False) -> QMimeData:
+    mime = QMimeData()
+    if content.image:
+        if plain:
+            raise ValueError("图片没有纯文本内容。")
+        # PNG is a standard X11 target; Qt supplies other formats on request when
+        # its image representation is present. Decode only when the user copies.
+        mime.setData("image/png", content.image)
+        mime.setImageData(QImage.fromData(content.image, "PNG"))
+    else:
+        mime.setText(content.text)
+        if content.html and not plain:
+            mime.setHtml(content.html)
+    return mime

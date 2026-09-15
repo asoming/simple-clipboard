@@ -1,0 +1,56 @@
+test_chat_paste_does_not_submit (test_desktop.DesktopTests) ... ok
+test_external_clipboard_preserves_unicode_whitespace_and_order (test_desktop.DesktopTests) ... ok
+test_fresh_process_does_not_harvest_existing_clipboard (test_desktop.DesktopTests) ... ok
+test_global_hotkey_and_conflict_keeps_original (test_desktop.DesktopTests) ... ok
+test_html_original_and_plain_text_native_paste (test_desktop.DesktopTests) ... ok
+test_ignore_next_external_change_not_internal_copy (test_desktop.DesktopTests) ... ok
+test_image_capture_copy_and_image_filter (test_desktop.DesktopTests) ... ok
+test_ime_preedit_and_commit_enter_do_not_paste (test_desktop.DesktopTests) ... ok
+test_invalid_target_falls_back_without_typing_elsewhere (test_desktop.DesktopTests) ... ok
+test_keyboard_paste_returns_to_external_editor (test_desktop.DesktopTests) ... ok
+test_multiline_terminal_requires_manual_paste (test_desktop.DesktopTests) ... ok
+test_own_copy_does_not_reinsert_deleted_history (test_desktop.DesktopTests) ... ok
+test_pause_and_clear_cancel_pending_worker (test_desktop.DesktopTests) ... ok
+test_pause_resume_ignores_previous_content (test_desktop.DesktopTests) ... ok
+test_pause_survives_a_new_monitor (test_desktop.DesktopTests) ... ok
+test_search_and_esc_do_not_change_clipboard (test_desktop.DesktopTests) ... ok
+test_settings_save_applies_cleanup (test_desktop.DesktopTests) ... ok
+test_theme_follows_portal_signal_and_manual_override (test_desktop.DesktopTests) ... ok
+test_unsupported_file_and_secret_do_not_pollute_history (test_desktop.DesktopTests) ... ok
+test_available_portal_used_before_qt_starts (test_input_method.InputMethodStartupTests) ... ok
+test_no_portal_keeps_normal_ibus_discovery (test_input_method.InputMethodStartupTests) ... ok
+test_other_input_methods_and_explicit_configuration_untouched (test_input_method.InputMethodStartupTests) ... ok
+test_probe_timeout_does_not_prevent_startup (test_input_method.InputMethodStartupTests) ... ok
+test_an_old_lock_file_does_not_block_a_new_process (test_instance.InstanceLockTests) ... ok
+test_forced_exit_releases_lock_without_deleting_file (test_instance.InstanceLockTests) ... ok
+test_live_lock_rejects_second_instance_and_allows_restart (test_instance.InstanceLockTests) ... ok
+test_autostart_is_opt_in_quotes_path_and_preserves_unrelated_file (test_phase2.PhaseTwoTests) ... <frozen importlib._bootstrap>:671: ImportWarning: DynamicImporter.exec_module() not found; falling back to load_module()
+ok
+test_html_keeps_exact_source_plain_mode_strips_mime_only (test_phase2.PhaseTwoTests) ... ok
+test_html_only_gets_searchable_text (test_phase2.PhaseTwoTests) ... ok
+test_image_roundtrip_thumbnail_filter_name_search_and_restart (test_phase2.PhaseTwoTests) ... ok
+test_irrelevant_image_metadata_does_not_duplicate_pixels (test_phase2.PhaseTwoTests) ... ok
+test_large_image_resolution_and_decoded_size_limits (test_phase2.PhaseTwoTests) ... ok
+test_limit_rejection_and_sql_failure_do_not_mutate_history (test_phase2.PhaseTwoTests) ... ok
+test_mixed_capacity_counts_html_original_and_thumbnail (test_phase2.PhaseTwoTests) ... ok
+test_partial_schema_migration_rolls_back (test_phase2.PhaseTwoTests) ... ok
+test_saved_limits_prune_mixed_items_and_keep_favorites (test_phase2.PhaseTwoTests) ... ok
+test_sensitive_html_and_image_formats_are_skipped (test_phase2.PhaseTwoTests) ... ok
+test_v1_migration_preserves_text_identity_favorites_and_settings (test_phase2.PhaseTwoTests) ... ok
+test_byte_budget_evicts_oldest_unpinned (test_store.HistoryTests) ... ok
+test_clear_defaults_to_preserving_favorites (test_store.HistoryTests) ... ok
+test_count_budget_does_not_count_favorites (test_store.HistoryTests) ... ok
+test_delete_and_database_permissions (test_store.HistoryTests) ... ok
+test_duplicate_promoted_without_losing_favorite_name (test_store.HistoryTests) ... ok
+test_exact_text_and_case_insensitive_chinese_search (test_store.HistoryTests) ... ok
+test_expired_history_removed_but_favorites_survive (test_store.HistoryTests) ... ok
+test_pinned_capacity_rejection_is_atomic (test_store.HistoryTests) ... ok
+test_restart_preserves_history_settings_and_names (test_store.HistoryTests) ... ok
+test_search_name_and_literal_wildcards (test_store.HistoryTests) ... ok
+test_size_limit_counts_utf8_bytes (test_store.HistoryTests) ... ok
+test_unpin_expired_item_applies_retention (test_store.HistoryTests) ... ok
+
+----------------------------------------------------------------------
+Ran 50 tests in 8.553s
+
+OK

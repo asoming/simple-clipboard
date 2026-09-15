@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+data/
+*.sqlite3*
+*.sock
+
+# Runtime and private local configuration
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.lock
+*.bak
+.env
+.env.*
+*.pem
+*.key
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+
+# Launcher tied to this user's local path; use start.sh after cloning.
+启动剪贴板.desktop
+
+# Superseded phase-one screenshot
+preview.png

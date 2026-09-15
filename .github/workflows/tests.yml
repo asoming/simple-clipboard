@@ -1,0 +1,28 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x11:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pyqt5 python3-gi xvfb xauth dbus-x11 libx11-6 libxtst6
+      - name: Test on an isolated X11 display
+        env:
+          PYTHONPATH: .
+          PYTHONDONTWRITEBYTECODE: '1'
+          QT_QPA_PLATFORM: xcb
+          QT_XCB_GL_INTEGRATION: none
+          QT_IM_MODULE: compose
+          CLIPBOARD_ISOLATED_TEST: '1'
+        run: dbus-run-session -- xvfb-run -a -s '-screen 0 1100x850x24 -nolisten tcp' /usr/bin/python3 -m unittest discover -s tests -v

@@ -1,0 +1,22 @@
+[
+  {
+    "browser": "chrome",
+    "version": "152.0.7977.82",
+    "unicode_multiline_copy": "PASS",
+    "native_paste": "PASS",
+    "chat_no_submit": "PASS",
+    "html_original": "PASS",
+    "plain_text": "PASS",
+    "image_copy_and_paste": "PASS"
+  },
+  {
+    "browser": "msedge",
+    "version": "150.0.4078.48",
+    "unicode_multiline_copy": "PASS",
+    "native_paste": "PASS",
+    "chat_no_submit": "PASS",
+    "html_original": "PASS",
+    "plain_text": "PASS",
+    "image_copy_and_paste": "PASS"
+  }
+]

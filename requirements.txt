@@ -1,0 +1,2 @@
+# The user's Ubuntu 22.04 has this Qt binding installed already.
+PyQt5>=5.15.6,<6
