@@ -492,7 +492,8 @@ class Panel(QWidget):
             text = clip.name or clip.preview or ("图片" if clip.kind == "image" else "空白文本")
             title = text
             copied = datetime.fromtimestamp(clip.copied_at)
-            stamp = copied.strftime("今天 %H:%M" if copied.date() == datetime.now().date() else "%m-%d %H:%M")
+            # Windows strftime may encode its format through a non-Chinese locale.
+            stamp = "今天 " + copied.strftime("%H:%M") if copied.date() == datetime.now().date() else copied.strftime("%m-%d %H:%M")
             detail = f"{clip.width} × {clip.height}" if clip.kind == "image" else "网页" if clip.rich else "文本"
             description = ("已收藏 · " if clip.pinned else "") + f"{stamp} · {detail}"
             item = QListWidgetItem(title + "\n" + description)

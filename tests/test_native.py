@@ -45,14 +45,11 @@ class NativeDesktopTests(unittest.TestCase):
             sys.stdout.flush()
             os._exit(1)
         sys.excepthook = gui_exception
-        print('Native test desktop: starting synthetic receiver', flush=True)
         cls.socket_name = 'clipboard-test-' + uuid.uuid4().hex
         if sys.platform == 'darwin':
             cls.socket_name = '/tmp/sc-test-' + uuid.uuid4().hex
         cls.peer = subprocess.Popen([sys.executable, 'tests/peer.py', cls.socket_name])
-        print('Native test desktop: creating backend', flush=True)
         cls.backend = create_backend()
-        print('Native test desktop: connecting receiver', flush=True)
         def ready():
             socket = QLocalSocket()
             socket.connectToServer(cls.socket_name)
@@ -64,7 +61,6 @@ class NativeDesktopTests(unittest.TestCase):
             cls.peer.terminate()
             cls.peer.wait(timeout=10)
             raise AssertionError('Synthetic peer did not start')
-        print('Native test desktop: receiver connected', flush=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -74,13 +70,10 @@ class NativeDesktopTests(unittest.TestCase):
         cls.peer.wait(timeout=10)
 
     def setUp(self):
-        print('Native test: creating temporary history', flush=True)
         self.temp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.temp.name) / 'history.sqlite3')
         self.monitor = Monitor(app.clipboard(), self.store)
-        print('Native test: creating panel', flush=True)
         self.panel = Panel(self.store, self.monitor, self.backend)
-        print('Native test: panel ready', flush=True)
 
     def tearDown(self):
         self.monitor.stop()
