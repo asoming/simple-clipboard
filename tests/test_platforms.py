@@ -18,7 +18,7 @@ from clipboard_app.instance import InstanceLock
 from clipboard_app.migration import import_history
 from clipboard_app.paths import default_data_dir, instance_socket
 from clipboard_app.platforms import NativeBackend, Target, parse_shortcut
-from clipboard_app.preferences import MacAutostart, WindowsAutostart
+from clipboard_app.preferences import LinuxAutostart, MacAutostart, WindowsAutostart
 from clipboard_app.store import Store
 from clipboard_app.ui import SearchEdit
 
@@ -134,6 +134,11 @@ class PlatformTests(unittest.TestCase):
             self.assertTrue(startup.enabled())
             value = plistlib.loads(startup.path.read_bytes())
             self.assertEqual(value['ProgramArguments'][-1], str(startup.data_dir))
+            value['ProgramArguments'] = ['/old/application', '--hidden']
+            startup.path.write_bytes(plistlib.dumps(value))
+            self.assertTrue(startup.enabled())
+            startup.set_enabled(True)
+            self.assertEqual(plistlib.loads(startup.path.read_bytes()), startup.document())
             startup.set_enabled(False)
             self.assertFalse(startup.path.exists())
             startup.path.write_bytes(plistlib.dumps({'Label': 'somebody-else'}))
@@ -142,6 +147,18 @@ class PlatformTests(unittest.TestCase):
             startup.path.write_bytes(b'broken plist')
             with self.assertRaises(ValueError):
                 startup.set_enabled(True)
+
+    def test_legacy_linux_startup_stays_visible_and_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            startup = LinuxAutostart(root, root)
+            startup.path.parent.mkdir()
+            startup.path.write_text('[Desktop Entry]\nType=Application\nExec="/old/start.sh" --hidden\nX-Clipboard-Managed=true\n')
+            self.assertTrue(startup.enabled())
+            startup.set_enabled(True)
+            self.assertEqual(startup.path.read_text(), startup.document())
+            startup.set_enabled(False)
+            self.assertFalse(startup.enabled())
 
     @unittest.skipUnless(sys.platform == 'win32', 'Windows registry')
     def test_windows_autostart_is_opt_in_and_can_be_removed(self):
@@ -153,6 +170,12 @@ class PlatformTests(unittest.TestCase):
                 self.assertFalse(startup.enabled())
                 startup.set_enabled(True)
                 self.assertTrue(startup.enabled())
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as handle:
+                    winreg.SetValueEx(handle, startup.value_name, 0, winreg.REG_SZ, '"C:\\old\\clipboard.exe" --hidden')
+                self.assertTrue(startup.enabled())
+                startup.set_enabled(True)
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as handle:
+                    self.assertEqual(winreg.QueryValueEx(handle, startup.value_name)[0], startup.document())
                 startup.set_enabled(False)
                 self.assertFalse(startup.enabled())
             finally:

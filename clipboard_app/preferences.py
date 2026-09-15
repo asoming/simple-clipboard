@@ -38,7 +38,10 @@ class LinuxAutostart:
                 f'Exec={command}\nTerminal=false\n{MARKER}\n')
 
     def enabled(self) -> bool:
-        return self.path.is_file() and self.path.read_text() == self.document()
+        if not self.path.is_file():
+            return False
+        lines = self.path.read_text().splitlines()
+        return MARKER in lines and 'Hidden=true' not in lines
 
     def set_enabled(self, enabled: bool):
         if self.path.exists() and MARKER not in self.path.read_text().splitlines():
@@ -73,7 +76,8 @@ class MacAutostart:
     def enabled(self):
         if not self.path.exists():
             return False
-        return self.read_document() == self.document()
+        document = self.read_document()
+        return document.get('Label') == self.label and bool(document.get('RunAtLoad'))
 
     def read_document(self):
         try:
@@ -119,7 +123,7 @@ class WindowsAutostart:
         try:
             with r.OpenKey(r.HKEY_CURRENT_USER, self.key) as key:
                 value, kind = r.QueryValueEx(key, self.value_name)
-                return kind == r.REG_SZ and value == self.document()
+                return kind in (r.REG_SZ, r.REG_EXPAND_SZ) and bool(value)
         except FileNotFoundError:
             return False
 

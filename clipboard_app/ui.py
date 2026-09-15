@@ -719,7 +719,9 @@ class Panel(QWidget):
                 error_label.show()
                 return
             try:
-                if startup.isEnabled() and startup.isChecked() != self.autostart.enabled():
+                # Saving an enabled entry also refreshes a path left by an old
+                # source launcher or a moved installation.
+                if startup.isEnabled() and (startup.isChecked() or self.autostart.enabled()):
                     self.autostart.set_enabled(startup.isChecked())
             except (OSError, ValueError):
                 error_label.setText("保存规则和外观已更新，但无法修改自启动文件。请检查目录权限后重试，或取消勾选自启动。")
