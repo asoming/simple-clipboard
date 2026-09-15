@@ -15,7 +15,7 @@ from unittest.mock import patch
 from PyQt5.QtCore import Qt, QTimer
 if sys.platform.startswith('linux'):
     from PyQt5.QtDBus import QDBusVariant
-from PyQt5.QtGui import QInputMethodEvent
+from PyQt5.QtGui import QInputMethodEvent, QPalette
 from PyQt5.QtNetwork import QLocalSocket
 from PyQt5.QtTest import QSignalSpy, QTest
 from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QSpinBox
@@ -287,13 +287,16 @@ class DesktopTests(unittest.TestCase):
 
     def test_theme_follows_portal_signal_and_manual_override(self):
         self.panel.appearance.on_setting("org.freedesktop.appearance", "color-scheme", QDBusVariant(1))
-        self.assertIn("background: #22262c", self.panel.styleSheet())
+        self.assertTrue(self.panel.history.property("dark"))
+        self.assertLess(self.panel.palette().color(QPalette.Window).lightness(), 128)
         self.store.set_setting("theme", "light")
         self.panel._style()
-        self.assertIn("background: #fafbfc", self.panel.styleSheet())
+        self.assertFalse(self.panel.history.property("dark"))
+        self.assertGreater(self.panel.palette().color(QPalette.Window).lightness(), 128)
         self.store.set_setting("theme", "system")
         self.panel.appearance.on_setting("org.freedesktop.appearance", "color-scheme", QDBusVariant(2))
-        self.assertIn("background: #fafbfc", self.panel.styleSheet())
+        self.assertFalse(self.panel.history.property("dark"))
+        self.assertGreater(self.panel.palette().color(QPalette.Window).lightness(), 128)
 
     def test_settings_save_applies_cleanup(self):
         self.store.add("old")

@@ -1,23 +1,25 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.3.0 工程预览 · GPL-3.0
+本地桌面剪贴板管理器 · 0.3.1 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色界面，使用自造示例](preview-light.png)
 
+0.3.1 调整了字号、留白和底部操作区。长内容显示最多两行摘要，通过「预览」查看全文；格式下拉框为文字和箭头分别预留空间。见 [界面改版记录](docs/界面改版验收报告.md)。
+
 ## 安装与启动
 
-从 [Releases 下载 0.3.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.3.0-preview.1)：
+从 [Releases 下载 0.3.1 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.3.1-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/simple-clipboard_0.3.0-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/simple-clipboard_0.3.1-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.3.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.3.1-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
@@ -36,7 +38,7 @@ Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，
 
 启动脚本使用 `/usr/bin/python3` 和系统 PyQt5。`requirements.txt` 供开发参考；仅在虚拟环境安装依赖不会改变启动脚本使用的解释器。
 
-0.3.0 沿用 0.2.0 数据库格式。打开 0.1.x 数据时通过事务升级，失败回滚、不自动重建。新版数据库不能用 0.1.x 打开。
+0.3.1 沿用 0.2.0 数据库格式。打开 0.1.x 数据时通过事务升级，失败回滚、不自动重建。新版数据库不能用 0.1.x 打开。
 
 ## 日常操作
 

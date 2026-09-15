@@ -34,7 +34,7 @@ def main():
     tag = os.environ['RELEASE_TAG']
     run_id = os.environ['BUILD_RUN_ID']
     repository = os.environ['GITHUB_REPOSITORY']
-    require(re.fullmatch(r'v0\.3\.0-preview\.\d+', tag), 'Expected a 0.3.0 preview tag')
+    require(re.fullmatch(r'v0\.3\.1-preview\.\d+', tag), 'Expected a 0.3.1 preview tag')
     require(run_id.isdecimal(), 'Invalid run ID')
     base = f'repos/{repository}'
     # The tag endpoint only returns published releases, so find the draft in the list.
@@ -61,15 +61,15 @@ def main():
                 for name in changed if name), 'Application or build inputs changed since the tested commit')
 
     installers = {
-        'ubuntu-22.04-x11': 'simple-clipboard_0.3.0-preview1_all.deb',
-        'windows-x64': 'SimpleClipboard-0.3.0-preview-windows-x64-setup.exe',
-        'macos-arm64': 'SimpleClipboard-0.3.0-preview-macos-arm64.dmg',
-        'macos-intel': 'SimpleClipboard-0.3.0-preview-macos-intel.dmg',
+        'ubuntu-22.04-x11': 'simple-clipboard_0.3.1-preview1_all.deb',
+        'windows-x64': 'SimpleClipboard-0.3.1-preview-windows-x64-setup.exe',
+        'macos-arm64': 'SimpleClipboard-0.3.1-preview-macos-arm64.dmg',
+        'macos-intel': 'SimpleClipboard-0.3.1-preview-macos-intel.dmg',
     }
     sources = {
-        'windows-x64': 'SimpleClipboard-0.3.0-preview-windows-sources.zip',
-        'macos-arm64': 'SimpleClipboard-0.3.0-preview-macos-arm64-sources.zip',
-        'macos-intel': 'SimpleClipboard-0.3.0-preview-macos-intel-sources.zip',
+        'windows-x64': 'SimpleClipboard-0.3.1-preview-windows-sources.zip',
+        'macos-arm64': 'SimpleClipboard-0.3.1-preview-macos-arm64-sources.zip',
+        'macos-intel': 'SimpleClipboard-0.3.1-preview-macos-intel-sources.zip',
     }
     artifacts = api(f'{base}/actions/runs/{run_id}/artifacts?per_page=100')['artifacts']
     artifacts = {item['name']: item for item in artifacts}

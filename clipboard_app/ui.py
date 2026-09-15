@@ -4,13 +4,13 @@ import sys
 import time
 from datetime import datetime
 
-from PyQt5.QtCore import QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
+from PyQt5.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QTextLayout, QTextOption
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QShortcut, QSpinBox, QStackedWidget,
-    QStyle, QStyledItemDelegate, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
+    QFrame, QSizePolicy, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .monitor import Monitor
@@ -77,6 +77,23 @@ class SearchEdit(QLineEdit):
             super().keyPressEvent(event)
 
 
+class FormatComboBox(QComboBox):
+    """Keep a visible arrow when the platform's native combo is styled."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        arrow = self.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxArrow, self)
+        center = arrow.center()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        group = QPalette.Active if self.isEnabled() else QPalette.Disabled
+        painter.setPen(QPen(self.palette().color(group, QPalette.ButtonText), 1.4))
+        painter.drawLine(QPointF(center.x() - 3, center.y() - 1), QPointF(center.x(), center.y() + 2))
+        painter.drawLine(QPointF(center.x(), center.y() + 2), QPointF(center.x() + 3, center.y() - 1))
+
+
 class HistoryList(QListWidget):
     paste_selected = pyqtSignal()
     copy_selected = pyqtSignal()
@@ -95,13 +112,54 @@ class HistoryList(QListWidget):
 
 
 class HistoryDelegate(QStyledItemDelegate):
-    """Keep the title and metadata on separate lines, even for short entries."""
+    """Measure every line with its actual font, including Chinese fallback glyphs."""
+
+    @staticmethod
+    def caption_font(font):
+        caption = QFont(font)
+        if font.pixelSize() > 0:
+            caption.setPixelSize(max(11, font.pixelSize() - 2))
+        else:
+            caption.setPointSizeF(max(9, font.pointSizeF() - 1))
+        return caption
+
+    @staticmethod
+    def title_lines(text, font, width):
+        width = max(1, width)
+        layout = QTextLayout(text, font)
+        option = QTextOption()
+        option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+        layout.setTextOption(option)
+        layout.beginLayout()
+        line = layout.createLine()
+        if not line.isValid():
+            layout.endLayout()
+            return [""]
+        line.setLineWidth(width)
+        # Qt string positions are UTF-16 offsets, not Python Unicode indices.
+        end = line.textLength() * 2
+        layout.endLayout()
+        encoded = text.encode("utf-16-le")
+        first = encoded[:end].decode("utf-16-le").rstrip()
+        rest = encoded[end:].decode("utf-16-le").lstrip()
+        return [first, QFontMetrics(font).elidedText(rest, Qt.ElideRight, width)] if rest else [first]
+
+    def dimensions(self, option, index, width):
+        title = index.data(Qt.DisplayRole).partition("\n")[0]
+        icon = index.data(Qt.DecorationRole)
+        inset = 70 if isinstance(icon, QIcon) and not icon.isNull() else 0
+        lines = self.title_lines(title, option.font, width - 32 - inset)
+        line_height = QFontMetrics(option.font).height() + 2
+        caption_height = QFontMetrics(self.caption_font(option.font)).height() + 2
+        return lines, line_height, caption_height, inset
 
     def sizeHint(self, option, index):
-        return QSize(200, 72)
+        width = option.widget.viewport().width() if option.widget else option.rect.width()
+        lines, line_height, caption_height, inset = self.dimensions(option, index, width)
+        return QSize(200, max(64, 18 + len(lines) * line_height + 5 + caption_height))
 
     def paint(self, painter, option, index):
-        title, _, description = index.data(Qt.DisplayRole).partition("\n")
+        _, _, description = index.data(Qt.DisplayRole).partition("\n")
         icon = index.data(Qt.DecorationRole)
         dark = bool(option.widget.property("dark"))
         painter.save()
@@ -109,23 +167,28 @@ class HistoryDelegate(QStyledItemDelegate):
         selected = option.state & QStyle.State_Selected
         hovered = option.state & QStyle.State_MouseOver
         if selected or hovered:
-            background = ("#354963" if dark else "#e9eff7") if selected else ("#2e3743" if dark else "#f0f3f7")
+            background = ("#303e52" if dark else "#edf2f8") if selected else ("#2b333e" if dark else "#f5f7fa")
             painter.setBrush(QColor(background))
-            painter.setPen(QPen(QColor("#6383aa" if dark else "#d3dfed")) if selected else QPen(Qt.NoPen))
-            painter.drawRoundedRect(option.rect.adjusted(1, 1, -1, -1), 6, 6)
-        rect = option.rect.adjusted(12, 8, -12, -8)
-        if isinstance(icon, QIcon) and not icon.isNull():
-            icon.paint(painter, rect.left(), rect.center().y() - 22, 64, 44)
-            rect.setLeft(rect.left() + 76)
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(option.rect.adjusted(1, 1, -1, -1), 8, 8)
+            if selected:
+                painter.setBrush(QColor("#90acd0" if dark else "#4b6485"))
+                painter.drawRoundedRect(QRect(option.rect.left() + 1, option.rect.top() + 14,
+                                              3, option.rect.height() - 28), 1, 1)
+        lines, line_height, caption_height, inset = self.dimensions(option, index, option.rect.width())
+        rect = option.rect.adjusted(16, 9, -16, -9)
+        if inset:
+            icon.paint(painter, rect.left(), rect.center().y() - 22, 56, 44)
+            rect.setLeft(rect.left() + inset)
         painter.setFont(option.font)
-        painter.setPen(QColor("#e3e8ef" if dark else "#27313e"))
-        painter.drawText(QRect(rect.left(), rect.top(), rect.width(), 24), Qt.AlignVCenter,
-                         painter.fontMetrics().elidedText(title, Qt.ElideRight, rect.width()))
-        font = painter.font()
-        font.setPixelSize(11)
-        painter.setFont(font)
-        painter.setPen(QColor("#a6b0bd" if dark else "#687483"))
-        painter.drawText(QRect(rect.left(), rect.top() + 30, rect.width(), 22), Qt.AlignVCenter,
+        painter.setPen(QColor("#edf1f6" if dark else "#222a35"))
+        for number, text in enumerate(lines):
+            painter.drawText(QRect(rect.left(), rect.top() + number * line_height, rect.width(), line_height),
+                             Qt.AlignVCenter | Qt.TextSingleLine, text)
+        painter.setFont(self.caption_font(option.font))
+        painter.setPen(QColor("#9aa6b6" if dark else "#77808e"))
+        painter.drawText(QRect(rect.left(), rect.top() + len(lines) * line_height + 5,
+                              rect.width(), caption_height), Qt.AlignVCenter | Qt.TextSingleLine,
                          painter.fontMetrics().elidedText(description, Qt.ElideRight, rect.width()))
         painter.restore()
 
@@ -151,7 +214,7 @@ class Panel(QWidget):
         self.setWindowTitle("剪贴板")
         self.setWindowIcon(app_icon())
         self.setMinimumSize(440, 460)
-        self.resize(520, 620)
+        self.resize(540, 620)
         self._build()
         self._style()
         self.appearance.changed.connect(self._style)
@@ -177,7 +240,7 @@ class Panel(QWidget):
 
     def _build(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 16, 22, 16)
+        root.setContentsMargins(20, 16, 20, 14)
         root.setSpacing(12)
         header = QHBoxLayout()
         title = QLabel("剪贴板")
@@ -188,6 +251,7 @@ class Panel(QWidget):
         self.state.setObjectName("subtle")
         header.addWidget(self.state)
         self.more = QToolButton()
+        self.more.setObjectName("more")
         self.more.setText("···")
         self.more.setAccessibleName("更多设置")
         self.more.setToolTip("暂停、设置与数据管理")
@@ -238,9 +302,11 @@ class Panel(QWidget):
         self.stack = QStackedWidget()
         self.history = HistoryList()
         self.history.setItemDelegate(HistoryDelegate(self.history))
-        self.history.setSpacing(3)
+        self.history.setSpacing(2)
         self.history.setIconSize(QSize(64, 44))
-        self.history.setUniformItemSizes(True)
+        self.history.setUniformItemSizes(False)
+        self.history.setResizeMode(QListWidget.Adjust)
+        self.history.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.history.setAccessibleName("历史记录")
         self.history.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.history.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -248,39 +314,56 @@ class Panel(QWidget):
         self.empty = QLabel("还没有记录\n复制文字或图片，就会出现在这里。")
         self.empty.setAlignment(Qt.AlignCenter)
         self.empty.setObjectName("empty")
+        self.empty.setWordWrap(True)
         self.stack.addWidget(self.history)
         self.stack.addWidget(self.empty)
         root.addWidget(self.stack, 1)
-        actions = QHBoxLayout()
+        divider = QFrame()
+        divider.setObjectName("divider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        utilities = QHBoxLayout()
+        utilities.setSpacing(4)
         self.preview_button = QPushButton("预览")
         self.pin_button = QPushButton("收藏")
         self.copy_button = QPushButton("仅复制")
         self.paste_button = QPushButton("粘贴")
         self.paste_button.setObjectName("primary")
         for button in (self.preview_button, self.pin_button):
-            actions.addWidget(button)
-        actions.addStretch()
-        actions.addWidget(self.copy_button)
-        actions.addWidget(self.paste_button)
-        root.addLayout(actions)
-        mode_row = QHBoxLayout()
-        mode_row.addStretch()
-        mode_row.addWidget(QLabel("粘贴格式"))
-        self.paste_mode = QComboBox()
+            button.setObjectName("quiet")
+            utilities.addWidget(button)
+        utilities.addStretch()
+        mode_label = QLabel("格式")
+        mode_label.setObjectName("subtle")
+        utilities.addWidget(mode_label)
+        self.paste_mode = FormatComboBox()
         self.paste_mode.addItem("原格式", False)
         self.paste_mode.addItem("纯文本", True)
         self.paste_mode.setAccessibleName("复制与粘贴格式")
+        self.paste_mode.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.paste_mode.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.paste_mode.currentIndexChanged.connect(self._fit_paste_mode)
         self.paste_mode.setToolTip("原格式保留图片或 HTML；纯文本只输出文字。两者都适用于「仅复制」。")
-        mode_row.addWidget(self.paste_mode)
-        root.addLayout(mode_row)
+        utilities.addWidget(self.paste_mode)
+        root.addLayout(utilities)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
         self.notice.setObjectName("notice")
         self.notice.hide()
         root.addWidget(self.notice)
-        self.hint = QLabel("↑↓ 选择    Enter 粘贴    " + ("⌘" if sys.platform == "darwin" else "Ctrl+") + "Enter 仅复制    Esc 关闭")
+        actions = QHBoxLayout()
+        self.hint = QLabel("↑ ↓ 选择  ·  Esc 关闭")
         self.hint.setObjectName("hint")
-        root.addWidget(self.hint)
+        self.hint.setWordWrap(True)
+        self.hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        actions.addWidget(self.hint, 1)
+        actions.addWidget(self.copy_button)
+        actions.addWidget(self.paste_button)
+        root.addLayout(actions)
+        self.paste_button.setToolTip("粘贴到原窗口 · Enter")
+        self.copy_button.setToolTip("仅复制 · " + ("⌘" if sys.platform == "darwin" else "Ctrl+") + "Enter")
+        self.preview_button.setToolTip("查看完整内容 · " + ("⌘" if sys.platform == "darwin" else "Ctrl+") + "Space")
+        self.pin_button.setToolTip("收藏或取消收藏 · " + ("⌘D" if sys.platform == "darwin" else "Ctrl+D"))
         self.search.textChanged.connect(self.refresh)
         self.search.move_selection.connect(self.move_selection)
         self.search.paste_selected.connect(self.paste)
@@ -302,65 +385,84 @@ class Panel(QWidget):
             shortcut.activated.connect(handler)
             self._shortcuts.append(shortcut)
 
+    def _fit_paste_mode(self):
+        # Native styles disagree on how much width a custom combo's arrow uses.
+        metrics = self.paste_mode.fontMetrics()
+        text_width = max(metrics.horizontalAdvance(self.paste_mode.itemText(i))
+                         for i in range(self.paste_mode.count()))
+        self.paste_mode.setMinimumWidth(text_width + 56)
+
     def _style(self):
-        stylesheet = """
-            QWidget { color: #27313e; background: #fafbfc; font-size: 14px; }
-            QLabel#title { font-size: 19px; font-weight: 600; }
-            QLabel#subtle, QLabel#hint { color: #687483; font-size: 12px; }
-            QLabel#empty { color: #687483; line-height: 1.8; }
-            QLabel#intro { color: #526578; background: #edf2f7; padding: 10px; border-radius: 6px; font-size: 12px; }
-            QLabel#notice { color: #795320; background: #fff4df; padding: 8px; border-radius: 4px; font-size: 12px; }
-            QLineEdit { background: white; border: 1px solid #d8dee7; border-radius: 7px; padding: 7px 12px; }
-            QComboBox, QSpinBox { background: white; border: 1px solid #d8dee7; border-radius: 4px; padding: 5px; }
-            QLineEdit:focus { border: 1px solid #58789d; }
-            QListWidget { background: transparent; border: none; outline: none; }
-            QListWidget::item { padding: 12px 10px; border: 1px solid transparent; border-radius: 6px; }
-            QListWidget::item:selected { background: #e9eff7; color: #253d59; border-color: #d3dfed; }
-            QListWidget::item:hover:!selected { background: #f0f3f7; }
-            QPushButton, QToolButton { background: white; border: 1px solid #d8dee7; border-radius: 5px; padding: 7px 12px; }
-            QPushButton:hover, QToolButton:hover { background: #edf2f7; }
-            QPushButton:focus, QToolButton:focus { border-color: #58789d; }
-            QPushButton:disabled { color: #a0a8b2; background: #f3f5f7; }
-            QPushButton#primary { background: #465f80; color: white; border-color: #465f80; }
-            QPushButton#primary:hover { background: #354e70; }
-            QPushButton#primary:disabled { background: #bbc4cf; border-color: #bbc4cf; }
-            QPushButton#filter { border: none; background: transparent; color: #687483; padding: 5px 12px; }
-            QPushButton#filter:checked { background: #e9eff7; color: #304b6a; }
-            QToolButton::menu-indicator { image: none; }
-            QMenu { background: white; border: 1px solid #d8dee7; padding: 5px; }
-            QMenu::item { padding: 8px 20px; }
-            QMenu::item:selected { background: #e9eff7; }
-            QPlainTextEdit { background: white; border: 1px solid #d8dee7; border-radius: 5px; padding: 8px; }
-            QScrollBar:vertical { background: transparent; width: 7px; margin: 0; }
-            QScrollBar::handle:vertical { background: #ccd3dc; border-radius: 3px; min-height: 30px; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-        """
         theme = self.store.setting("theme", "system")
         dark = theme == "dark" or (theme == "system" and self.appearance.dark)
         if dark:
-            replacements = {
-                "#27313e": "#e3e8ef", "#fafbfc": "#22262c", "#687483": "#a6b0bd",
-                "#526578": "#becbdc", "#edf2f7": "#303944", "#795320": "#ebc78b",
-                "#fff4df": "#443923", "white": "#2b3038", "#d8dee7": "#47515e",
-                "#58789d": "#93b4df", "#e9eff7": "#354963", "#253d59": "#edf4ff",
-                "#d3dfed": "#6383aa", "#f0f3f7": "#2e3743", "#a0a8b2": "#717e8e",
-                "#f3f5f7": "#272d34", "#bbc4cf": "#3f4855", "#304b6a": "#dceaff",
-                "#ccd3dc": "#596473",
-            }
-            for source, color in replacements.items():
-                stylesheet = stylesheet.replace(source, color)
-            stylesheet += "QPushButton#primary { color: #ffffff; }"
-        palette = QApplication.palette()
-        if dark:
-            for role, color in ((QPalette.Window, "#22262c"), (QPalette.Base, "#2b3038"),
-                                (QPalette.Text, "#e3e8ef"), (QPalette.WindowText, "#e3e8ef"),
-                                (QPalette.ButtonText, "#e3e8ef"), (QPalette.Highlight, "#354963"),
-                                (QPalette.HighlightedText, "#edf4ff")):
-                palette.setColor(role, QColor(color))
+            canvas, surface, ink, muted, line, accent, selection = (
+                "#1d2229", "#252c35", "#edf1f6", "#9aa6b6", "#394351", "#90acd0", "#303e52")
+            hover, warning, warning_ink = "#2b333e", "#403726", "#ebca93"
+        else:
+            canvas, surface, ink, muted, line, accent, selection = (
+                "#f5f6f8", "#ffffff", "#222a35", "#77808e", "#e3e7ed", "#4b6485", "#edf2f8")
+            hover, warning, warning_ink = "#f5f7fa", "#fff5e4", "#805e2d"
+        font = QFont(QApplication.font())
+        family = {"win32": "Microsoft YaHei UI", "darwin": "PingFang SC"}.get(sys.platform, "Noto Sans CJK SC")
+        if family in QFontDatabase().families():
+            font.setFamily(family)
+        font.setPointSizeF(max(10, font.pointSizeF() - 2))
+        self.setFont(font)
+        caption = max(9, font.pointSizeF() - 1.5)
+        stylesheet = f"""
+            QWidget {{ color: {ink}; background: {surface}; }}
+            QLabel#title {{ font-size: {font.pointSizeF() + 2}pt; font-weight: 600; }}
+            QLabel#subtle, QLabel#hint {{ color: {muted}; font-size: {caption}pt; }}
+            QLabel#empty {{ color: {muted}; padding: 16px; }}
+            QLabel#intro {{ color: {muted}; background: {canvas}; padding: 10px; border-radius: 6px; font-size: {caption}pt; }}
+            QLabel#notice {{ color: {warning_ink}; background: {warning}; padding: 8px; border-radius: 6px; font-size: {caption}pt; }}
+            QFrame#divider {{ background: {line}; border: none; }}
+            QLineEdit {{ background: {canvas}; border: 1px solid {line}; border-radius: 8px; padding: 8px 12px; }}
+            QLineEdit:focus {{ background: {surface}; border-color: {accent}; }}
+            QComboBox, QSpinBox {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 6px 10px; }}
+            QComboBox {{ padding-right: 30px; }}
+            QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
+            QComboBox::down-arrow {{ image: none; }}
+            QComboBox:focus, QSpinBox:focus {{ border-color: {accent}; }}
+            QComboBox QAbstractItemView {{ background: {surface}; color: {ink}; selection-background-color: {selection}; selection-color: {ink}; }}
+            QListWidget {{ background: {surface}; border: none; outline: none; }}
+            QPushButton, QToolButton {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 7px 14px; }}
+            QPushButton:hover, QToolButton:hover {{ background: {hover}; border-color: {accent}; }}
+            QPushButton:focus, QToolButton:focus {{ border-color: {accent}; }}
+            QPushButton:disabled {{ color: {muted}; background: {canvas}; border-color: {line}; }}
+            QPushButton#primary {{ background: #4b6485; color: #ffffff; border-color: #4b6485; }}
+            QPushButton#primary:hover {{ background: #3a5375; border-color: #3a5375; }}
+            QPushButton#primary:disabled {{ background: {line}; color: {muted}; border-color: {line}; }}
+            QPushButton#filter {{ border: 1px solid transparent; background: transparent; color: {muted}; padding: 5px 12px; }}
+            QPushButton#filter:checked {{ background: {selection}; color: {accent}; }}
+            QPushButton#filter:focus {{ border-color: {accent}; }}
+            QPushButton#quiet, QToolButton#more {{ background: transparent; color: {muted}; border-color: transparent; padding: 6px 9px; }}
+            QPushButton#quiet:hover, QToolButton#more:hover {{ background: {hover}; color: {ink}; }}
+            QPushButton#quiet:focus, QToolButton#more:focus {{ border-color: {accent}; }}
+            QPushButton#quiet:disabled {{ color: {muted}; }}
+            QToolButton::menu-indicator {{ image: none; }}
+            QMenu {{ background: {surface}; border: 1px solid {line}; padding: 5px; }}
+            QMenu::item {{ padding: 8px 20px; }}
+            QMenu::item:selected {{ background: {selection}; }}
+            QPlainTextEdit {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 8px; }}
+            QScrollBar:vertical {{ background: transparent; width: 6px; margin: 0; }}
+            QScrollBar::handle:vertical {{ background: {line}; border-radius: 3px; min-height: 30px; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+        """
+        palette = QPalette(QApplication.palette())
+        for role, color in ((QPalette.Window, surface), (QPalette.Base, surface),
+                            (QPalette.Text, ink), (QPalette.WindowText, ink),
+                            (QPalette.Button, surface), (QPalette.ButtonText, ink),
+                            (QPalette.Highlight, selection), (QPalette.HighlightedText, ink)):
+            palette.setColor(role, QColor(color))
         self.history.setProperty("dark", dark)
         self.setPalette(palette)
         self.setStyleSheet(stylesheet)
+        self.ensurePolished()
+        self._fit_paste_mode()
+        self.history.doItemsLayout()
 
     def _tray(self):
         self.tray = QSystemTrayIcon(app_icon(), self)
@@ -387,11 +489,11 @@ class Panel(QWidget):
         self.history.clear()
         for clip in self.clips:
             text = clip.name or clip.preview or ("图片" if clip.kind == "image" else "空白文本")
-            prefix = "★  " if clip.pinned else ""
-            title = prefix + (text[:100] if text else "空白文本")
-            stamp = datetime.fromtimestamp(clip.copied_at).strftime("%m-%d %H:%M")
-            detail = f"{clip.width} × {clip.height} · {clip.size / 1024:.0f} KiB" if clip.kind == "image" else f"{clip.characters:,} 字符" + (" · HTML" if clip.rich else "")
-            description = f"{stamp}   ·   {detail}"
+            title = text
+            copied = datetime.fromtimestamp(clip.copied_at)
+            stamp = copied.strftime("今天 %H:%M" if copied.date() == datetime.now().date() else "%m-%d %H:%M")
+            detail = f"{clip.width} × {clip.height}" if clip.kind == "image" else "网页" if clip.rich else "文本"
+            description = ("已收藏 · " if clip.pinned else "") + f"{stamp} · {detail}"
             item = QListWidgetItem(title + "\n" + description)
             if clip.thumbnail:
                 thumbnail = QPixmap()
