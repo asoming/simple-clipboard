@@ -23,7 +23,7 @@ bash start.sh
 
 **这是工程预览，未签署 Windows 发行证书或完成 Apple Developer ID 公证。** SmartScreen / Gatekeeper 首次下载体验尚未验收；不提供关闭系统安全检查的脚本。正式签名发行与日常应用实机验收仍是第三阶段出口条件。
 
-Windows/macOS 二进制应与同次构建的 `sources` 源码包一起取得，依赖版本与许可证见 [第三方说明](packaging/THIRD-PARTY.md)。
+Windows/macOS 对应源码可从同次构建的 `sources` 获取，依赖版本与许可证见 [第三方说明](packaging/THIRD-PARTY.md)。
 
 启动脚本使用 `/usr/bin/python3` 和系统 PyQt5。`requirements.txt` 供开发参考；仅在虚拟环境安装依赖不会改变启动脚本使用的解释器。
 
@@ -66,7 +66,7 @@ Linux 已识别终端使用 Ctrl+Shift+V；Windows 使用 Ctrl+V，Mac 使用 Cm
 
 ## 保存与设置
 
-- 新安装使用当前用户的数据目录，见下表；旧源码目录已存在 `data/history.sqlite3` 时继续原地使用，不自动搬移。POSIX 权限为目录 700 / 文件 600；Windows 使用用户目录的继承 ACL，不把 chmod 当作 Windows 访问控制。
+- 新安装使用当前用户的数据目录，见下表；旧源码目录已存在 `data/history.sqlite3` 时继续原地使用，不自动搬移。新建 POSIX 目录权限为 700，文件为 600；Windows 使用用户目录的继承 ACL，不把 chmod 当作 Windows 访问控制。
 - 普通历史默认保留 **7 天、最多 500 条**；收藏不自动删除。
 - 默认总内容容量 **100 MiB**，单条上限 **10 MiB**；设置可调整。容量包含文字、HTML、PNG 和缩略图，数据库索引额外占用空间，界面同时显示文件实际大小。
 - 保存新规则会立即清理超限普通历史；不能把总容量降到收藏占用以下。降低单条上限只限制后续复制。

@@ -1,0 +1,45 @@
+{
+  "commit": "06de6c0a8dbeb3c986889dc9c667b5344f83277f",
+  "run": "https://github.com/asoming/simple-clipboard/actions/runs/34938338697",
+  "conclusion": "success",
+  "tests": {
+    "linux-x11": {
+      "total": 75,
+      "skipped": 9,
+      "passed": 66
+    },
+    "native (macos-15-intel, macos-intel)": {
+      "total": 75,
+      "skipped": 21,
+      "passed": 54
+    },
+    "native (windows-2025, windows-x64)": {
+      "total": 75,
+      "skipped": 22,
+      "passed": 53
+    },
+    "native (macos-14, macos-arm64)": {
+      "total": 75,
+      "skipped": 21,
+      "passed": 54
+    }
+  },
+  "jobs": [
+    {
+      "name": "linux-x11",
+      "conclusion": "success"
+    },
+    {
+      "name": "native (macos-15-intel, macos-intel)",
+      "conclusion": "success"
+    },
+    {
+      "name": "native (windows-2025, windows-x64)",
+      "conclusion": "success"
+    },
+    {
+      "name": "native (macos-14, macos-arm64)",
+      "conclusion": "success"
+    }
+  ]
+}
