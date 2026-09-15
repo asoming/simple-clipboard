@@ -38,11 +38,14 @@ def wait_until(condition, seconds=4):
 class NativeDesktopTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        print('Native test desktop: starting synthetic receiver', flush=True)
         cls.socket_name = 'clipboard-test-' + uuid.uuid4().hex
         if sys.platform == 'darwin':
             cls.socket_name = '/tmp/sc-test-' + uuid.uuid4().hex
         cls.peer = subprocess.Popen([sys.executable, 'tests/peer.py', cls.socket_name])
+        print('Native test desktop: creating backend', flush=True)
         cls.backend = create_backend()
+        print('Native test desktop: connecting receiver', flush=True)
         def ready():
             socket = QLocalSocket()
             socket.connectToServer(cls.socket_name)
@@ -54,6 +57,7 @@ class NativeDesktopTests(unittest.TestCase):
             cls.peer.terminate()
             cls.peer.wait(timeout=10)
             raise AssertionError('Synthetic peer did not start')
+        print('Native test desktop: receiver connected', flush=True)
 
     @classmethod
     def tearDownClass(cls):
