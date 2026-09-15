@@ -128,11 +128,18 @@ class MacBackend(NativeBackend):
         return bool(flags & mask)
 
     def send_paste(self, target):
-        for pressed in (True, False):
-            event = Quartz.CGEventCreateKeyboardEvent(None, 9, pressed)
+        # Release Command explicitly. Leaving its flag on the final V-up event
+        # can leave the session reporting a held modifier and block later pastes.
+        events = []
+        for code, pressed, flags in ((55, True, Quartz.kCGEventFlagMaskCommand),
+                                     (9, True, Quartz.kCGEventFlagMaskCommand),
+                                     (9, False, Quartz.kCGEventFlagMaskCommand), (55, False, 0)):
+            event = Quartz.CGEventCreateKeyboardEvent(None, code, pressed)
             if event is None:
                 return False
-            Quartz.CGEventSetFlags(event, Quartz.kCGEventFlagMaskCommand)
+            Quartz.CGEventSetFlags(event, flags)
+            events.append(event)
+        for event in events:
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
         return True
 

@@ -1,21 +1,44 @@
 """An isolated external editor for real X11 integration tests. Synthetic data only."""
 
 import json
+import itertools
 import sys
 
 from PyQt5.QtCore import QMimeData, QTimer, QUrl
 from PyQt5.QtNetwork import QLocalServer
-from PyQt5.QtGui import QColor, QImage, QTextCharFormat
+from PyQt5.QtGui import QColor, QImage, QPixmap, QTextCharFormat, QTextDocument
 from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QVBoxLayout, QWidget
 
 from clipboard_app.platforms import Target, create_backend
 
 app = QApplication([])
+
+
+class ImageEditor(QTextEdit):
+    """An image-capable receiver; stock QTextEdit does not accept raster MIME."""
+    image_ids = itertools.count()
+
+    def canInsertFromMimeData(self, source):
+        return source.hasImage() or super().canInsertFromMimeData(source)
+
+    def insertFromMimeData(self, source):
+        if source.hasImage():
+            image = source.imageData()
+            if isinstance(image, QPixmap):
+                image = image.toImage()
+            if isinstance(image, QImage) and not image.isNull():
+                name = 'synthetic-image-' + str(next(self.image_ids))
+                self.document().addResource(QTextDocument.ImageResource, QUrl(name), image)
+                self.textCursor().insertImage(name)
+                return
+        super().insertFromMimeData(source)
+
+
 window = QWidget()
 window.setWindowTitle("Clipboard test editor — synthetic content only")
 window.resize(600, 400)
 layout = QVBoxLayout(window)
-edit = QTextEdit()
+edit = ImageEditor()
 chat = QLineEdit()
 layout.addWidget(edit)
 layout.addWidget(chat)

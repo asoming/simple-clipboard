@@ -15,6 +15,7 @@ from PyQt5.QtTest import QTest, QSignalSpy
 from PyQt5.QtWidgets import QApplication
 
 from clipboard_app.monitor import Monitor
+from clipboard_app.paths import instance_socket
 from clipboard_app.platforms import create_backend
 from clipboard_app.store import Content, Store
 from clipboard_app.ui import Panel
@@ -84,7 +85,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(socket.waitForConnected(1000))
         socket.write(json.dumps(dict(action=action, **kwargs)).encode() + b'\n')
         socket.flush()
-        self.assertTrue(wait_until(lambda: socket.bytesAvailable() > 0))
+        self.assertTrue(wait_until(lambda: socket.bytesAvailable() > 0, 10))
         response = json.loads(bytes(socket.readAll()))
         socket.close()
         return response
@@ -116,6 +117,31 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: not self.monitor.ignore_next))
         self.assertEqual(self.store.list(), [])
 
+    def test_second_launch_opens_the_existing_instance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            command = [sys.executable, '-m', 'clipboard_app', '--hidden', '--data-dir', directory]
+            first = subprocess.Popen(command)
+            try:
+                def running():
+                    socket = QLocalSocket()
+                    socket.connectToServer(instance_socket(Path(directory)))
+                    connected = socket.waitForConnected(100)
+                    socket.close()
+                    return connected
+                self.assertTrue(wait_until(running, 15))
+                second = subprocess.Popen(command)
+                try:
+                    self.assertTrue(wait_until(lambda: second.poll() is not None, 15))
+                    self.assertEqual(second.returncode, 0)
+                    self.assertIsNone(first.poll())
+                finally:
+                    if second.poll() is None:
+                        second.terminate()
+                        second.wait(timeout=10)
+            finally:
+                first.terminate()
+                first.wait(timeout=10)
+
     def test_hotkey_conflict_preserves_previous_registration(self):
         other = create_backend()
         try:
@@ -140,6 +166,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.panel.paste()
         self.assertTrue(wait_until(lambda: self.peer_call('read')['chat'] == '原生粘贴 中文'))
         self.assertEqual(self.peer_call('read')['submissions'], [])
+        self.assertTrue(wait_until(lambda: not self.backend.modifiers_pressed()))
 
     def test_denied_permission_keeps_copy_available(self):
         if sys.platform != 'darwin':
@@ -166,7 +193,10 @@ class NativeDesktopTests(unittest.TestCase):
             target = self.backend.capture_target()
             self.monitor.copy(Content(text='格式中文', html='<b>格式中文</b>'), plain=plain)
             self.backend.paste(target)
-            self.assertTrue(wait_until(lambda: self.peer_call('read')['text'] == '格式中文'))
+            failed = QSignalSpy(self.backend.paste_failed)
+            self.assertTrue(wait_until(lambda: self.peer_call('read')['text'] == '格式中文'),
+                            f'plain={plain}, modifiers={self.backend.modifiers_pressed()}, failed={list(failed)}')
+            self.assertTrue(wait_until(lambda: not self.backend.modifiers_pressed()))
             self.assertEqual('font-weight:600' in self.peer_call('read')['html'], not plain)
         window = self.peer_call('focus')['window']
         self.assertTrue(wait_until(lambda: self.backend.focus() == window))
@@ -177,12 +207,19 @@ class NativeDesktopTests(unittest.TestCase):
         self.backend.paste(target)
         self.assertTrue(wait_until(lambda: '<img' in self.peer_call('read')['html']))
 
-    def test_windows_hotkey_event_arrives(self):
-        if sys.platform != 'win32':
-            self.skipTest('Windows SendInput; macOS hotkey activation requires manual permission test')
+    def test_global_hotkey_event_arrives(self):
+        if self.backend.permission_message():
+            self.skipTest('Native key injection needs Accessibility on this runner')
         self.peer_call('focus')
         self.panel.hide()
         activated = QSignalSpy(self.backend.activated)
-        self.backend.register('Ctrl+Alt+V')
-        self.assertTrue(self.backend.send_keys([0x11, 0x12, ord('V')]))
+        self.backend.register(self.backend.default_shortcut)
+        if sys.platform == 'win32':
+            self.assertTrue(self.backend.send_keys([0x11, 0x12, ord('V')]))
+        else:
+            import Quartz
+            for pressed in (True, False):
+                event = Quartz.CGEventCreateKeyboardEvent(None, 9, pressed)
+                Quartz.CGEventSetFlags(event, Quartz.kCGEventFlagMaskCommand | Quartz.kCGEventFlagMaskShift if pressed else 0)
+                Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
         self.assertTrue(wait_until(lambda: bool(activated)))

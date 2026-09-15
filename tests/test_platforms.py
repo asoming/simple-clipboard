@@ -9,7 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PyQt5.QtTest import QSignalSpy
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QInputMethodEvent
+from PyQt5.QtTest import QSignalSpy, QTest
 from PyQt5.QtWidgets import QApplication
 
 from clipboard_app.instance import InstanceLock
@@ -18,6 +20,7 @@ from clipboard_app.paths import default_data_dir, instance_socket
 from clipboard_app.platforms import NativeBackend, Target, parse_shortcut
 from clipboard_app.preferences import MacAutostart, WindowsAutostart
 from clipboard_app.store import Store
+from clipboard_app.ui import SearchEdit
 
 app = QApplication.instance() or QApplication([])
 
@@ -48,6 +51,18 @@ class FakeBackend(NativeBackend):
 
 
 class PlatformTests(unittest.TestCase):
+    def test_chinese_composition_commit_does_not_trigger_paste(self):
+        search = SearchEdit()
+        pasted = QSignalSpy(search.paste_selected)
+        app.sendEvent(search, QInputMethodEvent('zhong', []))
+        QTest.keyClick(search, Qt.Key_Return)
+        commit = QInputMethodEvent()
+        commit.setCommitString('中')
+        app.sendEvent(search, commit)
+        QTest.keyClick(search, Qt.Key_Return)
+        self.assertEqual(search.text(), '中')
+        self.assertEqual(len(pasted), 0)
+
     def test_focus_or_held_modifier_never_injects(self):
         for ready, modifiers in [(False, False), (True, True)]:
             backend = FakeBackend()
