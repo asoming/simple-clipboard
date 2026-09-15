@@ -1,0 +1,35 @@
+name: Prepare preview release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Tests run containing the matching preview artifacts
+        required: true
+      tag:
+        description: Existing draft prerelease tag
+        required: true
+        default: v0.3.0-preview.1
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: preview-release-assets-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Verify and transfer existing build artifacts into the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          BUILD_RUN_ID: ${{ inputs.run_id }}
+        run: python3 packaging/prepare_release.py

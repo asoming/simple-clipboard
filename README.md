@@ -1,6 +1,6 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 当前分支 0.3.0 工程预览 · GPL-3.0
+本地桌面剪贴板管理器 · 0.3.0 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
@@ -8,22 +8,31 @@
 
 ## 安装与启动
 
+从 [Releases 下载 0.3.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.3.0-preview.1)：
+
+| 系统 | 安装包 |
+|---|---|
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/SimpleClipboard-0.3.0-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.3.0-preview.1/simple-clipboard_0.3.0-preview1_all.deb) |
+
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.3.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
 ```bash
 sudo apt install python3-pyqt5 python3-gi libx11-6 libxtst6
-git clone --branch phase-3-platforms https://github.com/asoming/simple-clipboard.git
+git clone https://github.com/asoming/simple-clipboard.git
 cd simple-clipboard
 bash start.sh
 ```
 
 默认 **Ctrl+Alt+V** 打开或关闭面板，Mac 默认 **Cmd+Shift+V**。重复启动会打开已运行的窗口。
 
-预览包位于 [GitHub Actions](https://github.com/asoming/simple-clipboard/actions) 成功运行的 Artifacts 中（保留 14 天，需要 GitHub 登录）。Windows 下载 `windows-x64-preview` 的 setup.exe；Mac 选择 `macos-arm64-preview` 或 `macos-intel-preview` 的 dmg，将应用拖入 Applications 后再启动。Ubuntu 下载 deb，用 `sudo apt install ./simple-clipboard_0.3.0-preview1_all.deb` 安装。
-
 **这是工程预览，未签署 Windows 发行证书或完成 Apple Developer ID 公证。** SmartScreen / Gatekeeper 首次下载体验尚未验收；不提供关闭系统安全检查的脚本。正式签名发行与日常应用实机验收仍是第三阶段出口条件。
 
-Windows/macOS 对应源码可从同次构建的 `sources` 获取，依赖版本与许可证见 [第三方说明](packaging/THIRD-PARTY.md)。
+Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，依赖版本与许可证见 [第三方说明](packaging/THIRD-PARTY.md)。Actions Artifacts 仅用于临时构建检查。
 
 启动脚本使用 `/usr/bin/python3` 和系统 PyQt5。`requirements.txt` 供开发参考；仅在虚拟环境安装依赖不会改变启动脚本使用的解释器。
 
