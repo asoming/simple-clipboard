@@ -337,6 +337,7 @@ class Panel(QWidget):
         mode_label.setObjectName("subtle")
         utilities.addWidget(mode_label)
         self.paste_mode = FormatComboBox()
+        self.paste_mode.setObjectName("pasteMode")
         self.paste_mode.addItem("原格式", False)
         self.paste_mode.addItem("纯文本", True)
         self.paste_mode.setAccessibleName("复制与粘贴格式")
@@ -421,9 +422,9 @@ class Panel(QWidget):
             QLineEdit {{ background: {canvas}; border: 1px solid {line}; border-radius: 8px; padding: 8px 12px; }}
             QLineEdit:focus {{ background: {surface}; border-color: {accent}; }}
             QComboBox, QSpinBox {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 6px 10px; }}
-            QComboBox {{ padding-right: 30px; }}
-            QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
-            QComboBox::down-arrow {{ image: none; }}
+            QComboBox#pasteMode {{ padding-right: 30px; }}
+            QComboBox#pasteMode::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
+            QComboBox#pasteMode::down-arrow {{ image: none; }}
             QComboBox:focus, QSpinBox:focus {{ border-color: {accent}; }}
             QComboBox QAbstractItemView {{ background: {surface}; color: {ink}; selection-background-color: {selection}; selection-color: {ink}; }}
             QListWidget {{ background: {surface}; border: none; outline: none; }}

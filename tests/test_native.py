@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import unittest
 import uuid
 from pathlib import Path
@@ -38,6 +39,12 @@ def wait_until(condition, seconds=4):
 class NativeDesktopTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.previous_exception_hook = sys.excepthook
+        def gui_exception(kind, value, stack):
+            traceback.print_exception(kind, value, stack, file=sys.stdout)
+            sys.stdout.flush()
+            os._exit(1)
+        sys.excepthook = gui_exception
         print('Native test desktop: starting synthetic receiver', flush=True)
         cls.socket_name = 'clipboard-test-' + uuid.uuid4().hex
         if sys.platform == 'darwin':
@@ -61,15 +68,19 @@ class NativeDesktopTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        sys.excepthook = cls.previous_exception_hook
         cls.backend.close()
         cls.peer.terminate()
         cls.peer.wait(timeout=10)
 
     def setUp(self):
+        print('Native test: creating temporary history', flush=True)
         self.temp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.temp.name) / 'history.sqlite3')
         self.monitor = Monitor(app.clipboard(), self.store)
+        print('Native test: creating panel', flush=True)
         self.panel = Panel(self.store, self.monitor, self.backend)
+        print('Native test: panel ready', flush=True)
 
     def tearDown(self):
         self.monitor.stop()
