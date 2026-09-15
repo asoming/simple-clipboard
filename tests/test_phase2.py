@@ -3,9 +3,11 @@
 import hashlib
 import json
 import sqlite3
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import closing
 from unittest.mock import patch
 
 from PyQt5.QtCore import QMimeData
@@ -97,12 +99,22 @@ class PhaseTwoTests(unittest.TestCase):
             prepare(Snapshot(image=b'not an image'), MIB)
 
     def test_sensitive_html_and_image_formats_are_skipped(self):
-        for secret in ('x-kde-passwordManagerHint', 'org.nspasteboard.ConcealedType', 'application/x-keepassxc-secret'):
+        for secret in ('x-kde-passwordManagerHint', 'org.nspasteboard.ConcealedType', 'application/x-keepassxc-secret',
+                       'application/x-qt-windows-mime;value="ExcludeClipboardContentFromMonitorProcessing"'):
             mime = QMimeData()
             mime.setData('image/png', self.image_content().image)
             mime.setHtml('<p>synthetic private</p>')
             mime.setData(secret, b'1')
             self.assertIsNone(snapshot(mime, MIB))
+
+    def test_windows_history_opt_out_flag_is_respected(self):
+        mime = QMimeData()
+        mime.setText('synthetic private')
+        flag = 'application/x-qt-windows-mime;value="CanIncludeInClipboardHistory"'
+        mime.setData(flag, b'\0\0\0\0')
+        self.assertIsNone(snapshot(mime, MIB))
+        mime.setData(flag, b'\1\0\0\0')
+        self.assertEqual(snapshot(mime, MIB).text, 'synthetic private')
 
     def test_saved_limits_prune_mixed_items_and_keep_favorites(self):
         favorite = self.store.add_content(self.image_content())
@@ -142,7 +154,7 @@ class PhaseTwoTests(unittest.TestCase):
     def create_legacy(self, broken=False):
         self.store.close()
         self.path.unlink()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.executescript("""
                 CREATE TABLE clips (id INTEGER PRIMARY KEY,digest TEXT NOT NULL UNIQUE,text TEXT NOT NULL,
                     name TEXT NOT NULL DEFAULT '',pinned INTEGER NOT NULL DEFAULT 0,copied_at REAL NOT NULL,size INTEGER NOT NULL);
@@ -173,7 +185,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.create_legacy(broken=True)
         with self.assertRaises(sqlite3.OperationalError):
             Store(self.path)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 1)
             columns = [row[1] for row in db.execute('PRAGMA table_info(clips)')]
             self.assertNotIn('html', columns)
@@ -182,7 +194,7 @@ class PhaseTwoTests(unittest.TestCase):
             db.execute('ALTER TABLE clips DROP COLUMN width')
         self.store = Store(self.path)
 
-    @unittest.skipUnless(__import__('sys').platform.startswith('linux'), 'Linux desktop-entry integration')
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux desktop-entry integration')
     def test_autostart_is_opt_in_quotes_path_and_preserves_unrelated_file(self):
         from gi.repository import Gio
         startup = Autostart(Path(self.temp.name) / '空 格 "quote" $ `tick` % folder', Path(self.temp.name))

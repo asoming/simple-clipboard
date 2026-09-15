@@ -38,6 +38,8 @@ class NativeDesktopTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.socket_name = 'clipboard-test-' + uuid.uuid4().hex
+        if sys.platform == 'darwin':
+            cls.socket_name = '/tmp/sc-test-' + uuid.uuid4().hex
         cls.peer = subprocess.Popen([sys.executable, 'tests/peer.py', cls.socket_name])
         cls.backend = create_backend()
         def ready():
@@ -46,7 +48,11 @@ class NativeDesktopTests(unittest.TestCase):
             result = socket.waitForConnected(100)
             socket.close()
             return result
-        assert wait_until(ready, 15), 'Synthetic peer did not start'
+        if not wait_until(ready, 15):
+            cls.backend.close()
+            cls.peer.terminate()
+            cls.peer.wait(timeout=10)
+            raise AssertionError('Synthetic peer did not start')
 
     @classmethod
     def tearDownClass(cls):

@@ -8,7 +8,7 @@ from collections import deque
 from PyQt5.QtCore import QObject, QRunnable, QThreadPool, QTimer, pyqtSignal
 from PyQt5.QtGui import QClipboard
 
-from .content import as_mime, prepare, snapshot
+from .content import SECRET_TYPES, as_mime, prepare, snapshot
 from .store import CapacityError, Clip, Content, Store
 
 
@@ -48,12 +48,14 @@ class Monitor(QObject):
         self._writing = False
         self._stopped = False
         self.sequence = None
+        self.native_types = None
         self.last_sequence = None
         self.poll_timer = QTimer(self)
         if sys.platform == 'darwin':
             from AppKit import NSPasteboard
             pasteboard = NSPasteboard.generalPasteboard()
             self.sequence = pasteboard.changeCount
+            self.native_types = pasteboard.types
             self.last_sequence = self.sequence()
             self.poll_timer.setInterval(150)
             self.poll_timer.timeout.connect(lambda: self._changed(QClipboard.Clipboard))
@@ -94,6 +96,11 @@ class Monitor(QObject):
                 return
             self.last_sequence = current
         if mode != QClipboard.Clipboard or self._writing or self.clipboard.ownsClipboard() or self.paused:
+            return
+        if self.native_types and set(self.native_types() or ()) & SECRET_TYPES:
+            if self.ignore_next:
+                self.ignore_next = False
+                self.state_changed.emit()
             return
         mime = self.clipboard.mimeData()
         if mime is None or not mime.formats():

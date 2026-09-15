@@ -31,7 +31,12 @@ def launch_arguments():
 
 
 def instance_socket(data_dir):
-    if sys.platform == 'win32':
+    if sys.platform in ('win32', 'darwin'):
         normalized = os.path.normcase(str(data_dir.resolve()))
-        return 'simple-clipboard-' + hashlib.sha256(normalized.encode()).hexdigest()[:24]
+        identifier = hashlib.sha256(normalized.encode()).hexdigest()[:24]
+        if sys.platform == 'darwin':
+            # Darwin's Unix socket paths are limited to 104 bytes. QLocalServer
+            # applies UserAccessOption; never derive a socket from a long home path.
+            return f'/tmp/sc-{os.getuid()}-{identifier}.sock'
+        return 'simple-clipboard-' + identifier
     return str(data_dir / 'instance.sock')

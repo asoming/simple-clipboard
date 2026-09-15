@@ -104,6 +104,12 @@ class PlatformTests(unittest.TestCase):
             self.assertLess(len(one), 80)
             self.assertNotEqual(one, instance_socket(Path('/synthetic/b')))
 
+    @unittest.skipIf(sys.platform == 'win32', 'Darwin uid path uses Unix API')
+    def test_mac_socket_fits_even_with_a_long_home_path(self):
+        with patch('clipboard_app.paths.sys.platform', 'darwin'):
+            name = instance_socket(Path('/synthetic/' + 'long' * 100))
+            self.assertLess(len(name.encode()), 104)
+
     def test_mac_login_item_quotes_by_argument_and_preserves_foreign_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -200,3 +206,11 @@ class MigrationTests(unittest.TestCase):
             self.assertIsNone(store.setting('paused'))
         finally:
             store.close()
+
+    def test_destination_journal_is_never_replaced(self):
+        Store(self.destination).close()
+        previous = self.destination.read_bytes()
+        Path(str(self.destination) + '-wal').write_bytes(b'synthetic pending transaction')
+        with self.assertRaises(ValueError):
+            import_history(self.source, self.destination)
+        self.assertEqual(self.destination.read_bytes(), previous)

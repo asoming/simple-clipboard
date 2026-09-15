@@ -21,6 +21,8 @@ def import_history(source: Path, destination: Path):
     temporary = None
     try:
         if destination.exists():
+            if any(Path(str(destination) + suffix).exists() for suffix in ('-wal', '-journal')):
+                raise ValueError('当前历史仍有事务文件，请先正常打开并退出当前版本，再导入。')
             with closing(sqlite3.connect(destination.as_uri() + '?mode=ro', uri=True)) as existing:
                 if existing.execute('SELECT 1 FROM clips LIMIT 1').fetchone():
                     raise ValueError('当前历史不为空，未覆盖。请改用新的空数据目录。')
