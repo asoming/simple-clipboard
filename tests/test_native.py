@@ -127,6 +127,10 @@ class NativeDesktopTests(unittest.TestCase):
 
     def test_second_launch_opens_the_existing_instance(self):
         with tempfile.TemporaryDirectory() as directory:
+            # This test concerns single-instance IPC, not OS login configuration.
+            seed = Store(Path(directory) / 'history.sqlite3')
+            seed.set_setting('startup_initialized', True)
+            seed.close()
             command = [sys.executable, '-m', 'clipboard_app', '--hidden', '--data-dir', directory]
             first = subprocess.Popen(command)
             try:

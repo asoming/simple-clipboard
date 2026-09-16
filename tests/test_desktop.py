@@ -219,11 +219,15 @@ class DesktopTests(unittest.TestCase):
     def test_fresh_process_does_not_harvest_existing_clipboard(self):
         self.peer_call("copy", text="already on clipboard before launch")
         with tempfile.TemporaryDirectory() as directory:
-            process = subprocess.Popen([sys.executable, "-m", "clipboard_app", "--hidden", "--data-dir", directory])
+            process = subprocess.Popen([sys.executable, "-m", "clipboard_app", "--hidden", "--data-dir", directory],
+                                       env={**os.environ, "XDG_CONFIG_HOME": str(Path(directory) / "config")})
             try:
                 path = Path(directory) / "instance.sock"
                 self.assertTrue(wait_until(path.exists))
                 QTest.qWait(200)
+                startup = LinuxAutostart(Path(directory), Path(directory) / "config")
+                self.assertTrue(startup.enabled())
+                self.assertEqual(startup.path.read_text(), startup.document())
                 with sqlite3.connect(Path(directory) / "history.sqlite3") as db:
                     self.assertEqual(db.execute("SELECT count(*) FROM clips").fetchone()[0], 0)
             finally:
