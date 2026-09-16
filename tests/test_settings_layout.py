@@ -1,11 +1,13 @@
 """Settings layout checks use disposable storage and never open a clipboard."""
 
+import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from PyQt5.QtCore import QPoint, QRect
+from PyQt5.QtCore import QCoreApplication, QEvent, QPoint, QRect
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QStyle,
@@ -23,6 +25,23 @@ app = QApplication.instance() or QApplication([])
 
 
 class SettingsLayoutTests(unittest.TestCase):
+    def setUp(self):
+        self.gui_errors = []
+        previous_hook = sys.excepthook
+
+        def record_gui_error(kind, value, stack):
+            self.gui_errors.append(''.join(traceback.format_exception(kind, value, stack)))
+
+        sys.excepthook = record_gui_error
+        self.addCleanup(setattr, sys, "excepthook", previous_hook)
+        # processEvents alone leaves deleteLater widgets from earlier tests alive.
+        # A style change can call their appearance handlers after Store.close().
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def tearDown(self):
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.assertFalse(self.gui_errors, '\n'.join(self.gui_errors))
+
     def assert_text_fits(self, widget, area, text):
         metrics = widget.fontMetrics()
         # A Latin default font can report a shorter height than its CJK fallback.
@@ -112,6 +131,7 @@ class SettingsLayoutTests(unittest.TestCase):
                 if style.lower() not in available:
                     continue
                 with self.subTest(points=points, style=style, theme=theme):
+                    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
                     app.setStyle(style)
                     font = QFont(original_font)
                     font.setPointSize(points + 2)  # Panel applies its two-point reduction.
@@ -157,6 +177,7 @@ class SettingsLayoutTests(unittest.TestCase):
                             panel.tray.hide()
                             panel.hide()
                             panel.deleteLater()
+                            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
                             app.processEvents()
                             store.close()
         finally:
