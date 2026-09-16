@@ -160,7 +160,8 @@ DISPLAY=:100 QT_IM_MODULE=compose CLIPBOARD_ISOLATED_TEST=1 QT_QPA_PLATFORM=xcb 
 - `store.py`：SQLite、事务升级、轻量列表查询、收藏、搜索和清理。
 - `content.py`：MIME 采集、图片归一化、缩略图和输出格式。
 - `monitor.py`：监听、后台处理、队列上限、暂停和取消。
-- `ui.py`：搜索面板、预览、设置和操作菜单。
+- `ui.py`：搜索面板、预览和操作菜单。
+- `settings_dialog.py`：设置表单、字体尺寸适配和固定操作区。
 - `preferences.py`：可关闭的默认自启动、系统外观读取与变化通知。
 - `platforms.py`、`x11.py`、`windows.py`、`macos.py`：全局快捷键、原窗口检查及系统粘贴。
 - `paths.py`、`migration.py`：用户数据目录与离线原子导入。
