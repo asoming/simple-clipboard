@@ -4,7 +4,7 @@
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
-![浅色界面，使用自造示例](preview-light.png)
+![浅色界面，使用自造示例](docs/images/date-groups.png)
 
 0.4.0 加入日期分组、行尾星标、30 天 / 500 MiB 默认规则、原始图片保存、默认登录启动，以及空间和内存图。见 [本轮验收](docs/历史管理验收报告.md)。
 

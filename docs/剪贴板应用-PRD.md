@@ -293,4 +293,3 @@ v0.2 实现约定：默认 Ctrl+Alt+V，可在菜单修改。终端中的多行�
 - [Windows 剪贴板操作](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-operations)：通过内存对象传递，应用可提供多种格式；未据此虚构所有平台共同的单条上限。
 - [X11 ICCCM](https://xorg.freedesktop.org/archive/X11R7.7/doc/xorg-docs/icccm/icccm.html)：大数据可通过 INCR 分段传输，协议最大请求长度不等于内容上限。
 - [Windows 内存计数器](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters)：WorkingSetSize 是当前工作集字节数。Linux 使用 /proc/self/statm 常驻页，Mac 使用 ps 的 RSS；平台口径并非严格等价，不作为跨系统性能排名。
-
