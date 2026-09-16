@@ -1,11 +1,12 @@
 """One quiet panel: search, history, and explicit actions."""
 
 import sys
+import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from PyQt5.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QTextLayout, QTextOption
+from PyQt5.QtCore import QEvent, QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextLayout, QTextOption
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
     QInputDialog, QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMenu,
@@ -99,6 +100,18 @@ class HistoryList(QListWidget):
     copy_selected = pyqtSignal()
     dismiss = pyqtSignal()
 
+    def mouseDoubleClickEvent(self, event):
+        index = self.indexAt(event.pos())
+        if index.isValid():
+            from PyQt5.QtWidgets import QStyleOptionViewItem
+            option = QStyleOptionViewItem()
+            option.rect = self.visualRect(index)
+            option.font = self.font()
+            if self.itemDelegate().star_rect(option, index).contains(event.pos()):
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
+
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             if event.modifiers() & Qt.ControlModifier:
@@ -112,7 +125,28 @@ class HistoryList(QListWidget):
 
 
 class HistoryDelegate(QStyledItemDelegate):
-    """Measure every line with its actual font, including Chinese fallback glyphs."""
+    """Measured date groups, content summaries, and directly clickable stars."""
+
+    favorite_clicked = pyqtSignal(int)
+
+    @staticmethod
+    def group_height(option, index):
+        return QFontMetrics(option.font).height() + 18 if index.data(Qt.UserRole + 2) else 0
+
+    def content_rect(self, option, index):
+        return option.rect.adjusted(0, self.group_height(option, index), 0, 0)
+
+    def star_rect(self, option, index):
+        rect = self.content_rect(option, index)
+        return QRect(rect.right() - 42, rect.top() + 8, 34, 34)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick):
+            if event.button() == Qt.LeftButton and self.star_rect(option, index).contains(event.pos()):
+                if event.type() == QEvent.MouseButtonRelease:
+                    self.favorite_clicked.emit(index.data(Qt.UserRole))
+                return True
+        return super().editorEvent(event, model, option, index)
 
     @staticmethod
     def caption_font(font):
@@ -148,7 +182,7 @@ class HistoryDelegate(QStyledItemDelegate):
         title = index.data(Qt.DisplayRole).partition("\n")[0]
         icon = index.data(Qt.DecorationRole)
         inset = 70 if isinstance(icon, QIcon) and not icon.isNull() else 0
-        lines = self.title_lines(title, option.font, width - 32 - inset)
+        lines = self.title_lines(title, option.font, width - 70 - inset)
         line_height = QFontMetrics(option.font).height() + 2
         caption_height = QFontMetrics(self.caption_font(option.font)).height() + 2
         return lines, line_height, caption_height, inset
@@ -156,7 +190,7 @@ class HistoryDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         width = option.widget.viewport().width() if option.widget else option.rect.width()
         lines, line_height, caption_height, inset = self.dimensions(option, index, width)
-        return QSize(200, max(64, 18 + len(lines) * line_height + 5 + caption_height))
+        return QSize(200, self.group_height(option, index) + max(64, 18 + len(lines) * line_height + 5 + caption_height))
 
     def paint(self, painter, option, index):
         _, _, description = index.data(Qt.DisplayRole).partition("\n")
@@ -164,19 +198,32 @@ class HistoryDelegate(QStyledItemDelegate):
         dark = bool(option.widget.property("dark"))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
+        group = index.data(Qt.UserRole + 2)
+        content_rect = self.content_rect(option, index)
+        if group:
+            painter.setFont(self.caption_font(option.font))
+            painter.setPen(QColor("#9aa6b6" if dark else "#77808e"))
+            painter.drawText(option.rect.adjusted(12, 0, -12, 0), Qt.AlignTop | Qt.AlignLeft, group)
+        star = self.star_rect(option, index).center()
+        points = QPolygonF([QPointF(star.x() + (10 if i % 2 == 0 else 4.5) * math.cos(-math.pi / 2 + i * math.pi / 5),
+                                   star.y() + (10 if i % 2 == 0 else 4.5) * math.sin(-math.pi / 2 + i * math.pi / 5)) for i in range(10)])
         selected = option.state & QStyle.State_Selected
         hovered = option.state & QStyle.State_MouseOver
         if selected or hovered:
             background = ("#303e52" if dark else "#edf2f8") if selected else ("#2b333e" if dark else "#f5f7fa")
             painter.setBrush(QColor(background))
             painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(option.rect.adjusted(1, 1, -1, -1), 8, 8)
+            painter.drawRoundedRect(content_rect.adjusted(1, 1, -1, -1), 8, 8)
             if selected:
                 painter.setBrush(QColor("#90acd0" if dark else "#4b6485"))
-                painter.drawRoundedRect(QRect(option.rect.left() + 1, option.rect.top() + 14,
-                                              3, option.rect.height() - 28), 1, 1)
+                painter.drawRoundedRect(QRect(content_rect.left() + 1, content_rect.top() + 14,
+                                              3, content_rect.height() - 28), 1, 1)
         lines, line_height, caption_height, inset = self.dimensions(option, index, option.rect.width())
-        rect = option.rect.adjusted(16, 9, -16, -9)
+        pinned = bool(index.data(Qt.UserRole + 1))
+        painter.setPen(QPen(QColor("#d99d16" if pinned else "#8691a0"), 1.4))
+        painter.setBrush(QColor("#f5c451") if pinned else Qt.NoBrush)
+        painter.drawPolygon(points)
+        rect = content_rect.adjusted(16, 9, -54, -9)
         if inset:
             icon.paint(painter, rect.left(), rect.center().y() - 22, 56, 44)
             rect.setLeft(rect.left() + inset)
@@ -265,6 +312,7 @@ class Panel(QWidget):
         self.ignore_action.triggered.connect(self.monitor.toggle_ignore)
         self.menu.addSeparator()
         self.menu.addAction("设置…", self.settings)
+        self.menu.addAction("空间与内存…", self.storage)
         self.menu.addAction("保存与隐私…", self.privacy)
         self.menu.addAction("从旧版导入…", self.import_old_history)
         if self.backend and hasattr(self.backend, "open_permissions"):
@@ -302,7 +350,9 @@ class Panel(QWidget):
         root.addLayout(filters)
         self.stack = QStackedWidget()
         self.history = HistoryList()
-        self.history.setItemDelegate(HistoryDelegate(self.history))
+        delegate = HistoryDelegate(self.history)
+        delegate.favorite_clicked.connect(self.toggle_favorite)
+        self.history.setItemDelegate(delegate)
         self.history.setSpacing(2)
         self.history.setIconSize(QSize(64, 44))
         self.history.setUniformItemSizes(False)
@@ -468,7 +518,7 @@ class Panel(QWidget):
         body_height = self.history.fontMetrics().height() + 2
         caption_font = HistoryDelegate.caption_font(self.history.font())
         caption_height = QFontMetrics(caption_font).height() + 2
-        self.stack.setMinimumHeight(18 + 2 * body_height + 5 + caption_height + 8)
+        self.stack.setMinimumHeight(18 + 3 * body_height + 18 + 5 + caption_height + 8)
         self.history.doItemsLayout()
 
     def _tray(self):
@@ -494,12 +544,13 @@ class Panel(QWidget):
         self.clips = self.store.summaries(self.search.text(), self.favorites_only, self.kind)
         self.history.blockSignals(True)
         self.history.clear()
+        previous_date = None
         for clip in self.clips:
             text = clip.name or clip.preview or ("图片" if clip.kind == "image" else "空白文本")
             title = text
             copied = datetime.fromtimestamp(clip.copied_at)
             # Windows strftime may encode its format through a non-Chinese locale.
-            stamp = "今天 " + copied.strftime("%H:%M") if copied.date() == datetime.now().date() else copied.strftime("%m-%d %H:%M")
+            stamp = copied.strftime("%H:%M")
             detail = f"{clip.width} × {clip.height}" if clip.kind == "image" else "网页" if clip.rich else "文本"
             description = ("已收藏 · " if clip.pinned else "") + f"{stamp} · {detail}"
             item = QListWidgetItem(title + "\n" + description)
@@ -508,6 +559,13 @@ class Panel(QWidget):
                 thumbnail.loadFromData(clip.thumbnail, "PNG")
                 item.setIcon(QIcon(thumbnail))
             item.setData(Qt.UserRole, clip.id)
+            item.setData(Qt.UserRole + 1, clip.pinned)
+            if copied.date() != previous_date:
+                today = datetime.now().date()
+                prefix = "今天 · " if copied.date() == today else "昨天 · " if copied.date() == today - timedelta(days=1) else ""
+                item.setData(Qt.UserRole + 2, prefix + copied.strftime("%Y-%m-%d"))
+                previous_date = copied.date()
+            item.setData(Qt.AccessibleDescriptionRole, "已收藏，可取消收藏" if clip.pinned else "点击右侧星标收藏")
             self.history.addItem(item)
             if clip.id == previous_id:
                 self.history.setCurrentItem(item)
@@ -616,6 +674,18 @@ class Panel(QWidget):
             self.dismiss()
         event.ignore()
 
+    def mouseDoubleClickEvent(self, event):
+        index = self.indexAt(event.pos())
+        if index.isValid():
+            from PyQt5.QtWidgets import QStyleOptionViewItem
+            option = QStyleOptionViewItem()
+            option.rect = self.visualRect(index)
+            option.font = self.font()
+            if self.itemDelegate().star_rect(option, index).contains(event.pos()):
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self.dismiss()
@@ -659,17 +729,22 @@ class Panel(QWidget):
         self.pending_notice = message
         self.show_notice(message)
 
+    def toggle_favorite(self, clip_id):
+        summary = next((clip for clip in self.clips if clip.id == clip_id), None)
+        if summary:
+            self.store.favorite(clip_id, not summary.pinned)
+            self.refresh()
+
     def pin(self):
-        clip = self.selected()
-        if not clip:
-            return
-        if clip.pinned:
-            self.store.favorite(clip.id, False)
-        else:
-            name, accepted = QInputDialog.getText(self, "收藏", "名称（可留空）", text=clip.name)
-            if not accepted:
-                return
-            self.store.favorite(clip.id, True, name)
+        item = self.history.currentItem()
+        if item:
+            self.toggle_favorite(item.data(Qt.UserRole))
+
+    def storage(self):
+        from .storage_view import StorageDialog
+        dialog = StorageDialog(self.store, self)
+        dialog.exec_()
+        dialog.deleteLater()
         self.refresh()
 
     def rename(self):
@@ -695,8 +770,8 @@ class Panel(QWidget):
         dialog.resize(580, 420)
         layout = QVBoxLayout(dialog)
         if clip.image:
-            pixmap = QPixmap()
-            pixmap.loadFromData(clip.image, "PNG")
+            from .content import decoded_image
+            pixmap = QPixmap.fromImage(decoded_image(clip.image))
             scroll = QScrollArea()
             scroll.setAlignment(Qt.AlignCenter)
             label = QLabel()
@@ -741,7 +816,7 @@ class Panel(QWidget):
         menu.addAction("预览", self.preview)
         menu.addSeparator()
         clip = self.selected()
-        menu.addAction("取消收藏" if clip.pinned else "收藏…", self.pin)
+        menu.addAction("取消收藏" if clip.pinned else "收藏", self.pin)
         if clip.pinned:
             menu.addAction("修改名称…", self.rename)
         menu.addAction("删除", self.delete_selected)
@@ -774,12 +849,23 @@ class Panel(QWidget):
         form = QFormLayout()
         fields = []
         limits = self.store.limits
-        for label, value, maximum in (("保留天数", limits.days, 3650),
-                                      ("普通历史条数", limits.count, 10000),
+        retention = QComboBox()
+        retention.setAccessibleName("保留时间")
+        for label, days in (("1 天", 1), ("7 天", 7), ("1 个月（30 天）", 30), ("1 年（365 天）", 365), ("无限期", 0)):
+            retention.addItem(label, days)
+        # Show a legacy custom policy without silently shortening its duration.
+        index = retention.findData(limits.days)
+        if index < 0:
+            retention.addItem(f"原设置：{limits.days} 天", limits.days)
+            index = retention.count() - 1
+        retention.setCurrentIndex(index)
+        form.addRow("保留时间", retention)
+        for label, value, maximum in (("普通历史条数", limits.count, 100000),
                                       ("总内容容量（MiB）", limits.total_bytes // 1048576, 10240),
-                                      ("单条上限（MiB）", limits.item_bytes // 1048576, 100)):
+                                      ("单条上限（MiB）", limits.item_bytes // 1048576, 10240)):
             field = QSpinBox()
-            field.setRange(1, maximum)
+            field.setRange(1 if label == "总内容容量（MiB）" else 0, maximum)
+            field.setSpecialValueText("自动（受总容量约束）" if "单条" in label else "不限制条数")
             field.setValue(value)
             field.setAccessibleName(label)
             form.addRow(label, field)
@@ -803,7 +889,9 @@ class Panel(QWidget):
         layout.addLayout(form)
         usage = QLabel(f"内容 {self.store.usage() / 1048576:.2f} MiB · 数据库文件 {self.store.disk_usage() / 1048576:.2f} MiB\n"
                        "容量按文字、HTML、图片和缩略图计算，数据库索引会额外占用空间。\n\n"
-                       "保存后立即按期限、条数和容量清理普通历史，删除无法恢复。收藏不自动清理。图片最多 2400 万像素。")
+                       "无限期仅取消时间限制；超容量仍清理最旧的普通记录。收藏不自动清理。\n"
+                       "图片保留来源提供的原始数据，仅缩略图缩小；解码最多 2400 万像素。\n"
+                       "保存更短期限或更小容量后立即清理普通历史，删除无法恢复。")
         usage.setWordWrap(True)
         layout.addWidget(usage)
         error_label = QLabel()
@@ -815,7 +903,8 @@ class Panel(QWidget):
         buttons.button(QDialogButtonBox.Save).setText("保存")
         buttons.button(QDialogButtonBox.Cancel).setText("取消")
         def save():
-            days, count, total, item = (field.value() for field in fields)
+            days = retention.currentData()
+            count, total, item = (field.value() for field in fields)
             try:
                 new_limits = Limits(days, count, total * 1048576, item * 1048576)
                 if new_limits != self.store.limits:
@@ -833,6 +922,7 @@ class Panel(QWidget):
                 # source launcher or a moved installation.
                 if startup.isEnabled() and (startup.isChecked() or self.autostart.enabled()):
                     self.autostart.set_enabled(startup.isChecked())
+                self.store.set_setting("startup_initialized", True)
             except (OSError, ValueError):
                 error_label.setText("保存规则和外观已更新，但无法修改自启动文件。请检查目录权限后重试，或取消勾选自启动。")
                 error_label.show()
@@ -849,8 +939,8 @@ class Panel(QWidget):
         mb = self.store.usage() / 1024 / 1024
         QMessageBox.information(self, "保存与隐私", (
             "历史仅在本机保存，不上传、不登录。\n\n"
-            f"普通历史：{self.store.limits.days} 天，最多 {self.store.limits.count} 条。\n"
-            f"收藏不自动清理；总容量 {self.store.limits.total_bytes / 1048576:g} MiB，单条 {self.store.limits.item_bytes / 1048576:g} MiB。\n"
+            f"普通历史：{str(self.store.limits.days) + ' 天' if self.store.limits.days else '无限期'}；条数 {self.store.limits.count or '不限'}。\n"
+            f"收藏不自动清理；总容量 {self.store.limits.total_bytes / 1048576:g} MiB，单条有效上限 {self.store.limits.capture_bytes / 1048576:g} MiB。\n"
             f"当前内容占用：{mb:.2f} MiB（不含数据库额外空间）。\n\n"
             f"数据目录：{self.store.path.parent}\n卸载应用默认保留历史；可先在清空历史中删除全部收藏并重置设置。\n\n"
             "可通过菜单暂停记录、忽略下一次复制或清空历史。\n"

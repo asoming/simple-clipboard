@@ -1,25 +1,25 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.3.1 工程预览 · GPL-3.0
+本地桌面剪贴板管理器 · 0.4.0 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色界面，使用自造示例](preview-light.png)
 
-0.3.1 调整了字号、留白和底部操作区。长内容显示最多两行摘要，通过「预览」查看全文；格式下拉框为文字和箭头分别预留空间。见 [界面改版记录](docs/界面改版验收报告.md)。
+0.4.0 加入日期分组、行尾星标、30 天 / 500 MiB 默认规则、原始图片保存、默认登录启动，以及空间和内存图。见 [本轮验收](docs/历史管理验收报告.md)。
 
 ## 安装与启动
 
-从 [Releases 下载 0.3.1 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.3.1-preview.1)：
+从 [Releases 下载 0.4.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.4.0-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/SimpleClipboard-0.3.1-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.3.1-preview.1/simple-clipboard_0.3.1-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/simple-clipboard_0.4.0-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.3.1-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.4.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
@@ -38,7 +38,7 @@ Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，
 
 启动脚本使用 `/usr/bin/python3` 和系统 PyQt5。`requirements.txt` 供开发参考；仅在虚拟环境安装依赖不会改变启动脚本使用的解释器。
 
-0.3.1 沿用 0.2.0 数据库格式。打开 0.1.x 数据时通过事务升级，失败回滚、不自动重建。新版数据库不能用 0.1.x 打开。
+0.4.0 将数据库版本升级为 3，用于支持多种原始图片格式。升级保留历史与收藏；旧版会拒绝打开新格式数据库，请勿降级。没有保存规则或沿用完整旧默认规则的用户切换到新默认值；自定义规则保留。
 
 ## 日常操作
 
@@ -64,7 +64,7 @@ Mac 的面板内 Ctrl 快捷键对应 Cmd，例如 Cmd+Enter 仅复制。
 
 - **原格式：**保存文字及来源提供的 HTML，或静态图片；不承诺保留 RTF、办公应用专有对象和网页全部排版。HTML 以纯文本预览，避免加载外部网页资源。
 - **纯文本：**仅提供原有文字，去掉来源 HTML；目标编辑器仍可沿用光标处的样式。每次重新打开面板默认「原格式」。
-- **图片：**转为 PNG 保存，生成小缩略图；保留像素和颜色配置，归一化作者、DPI 等元数据。不做 OCR，不搜索图片中的文字；可收藏命名后按名称搜索。
+- **图片：**优先逐字节保存来源提供的 PNG/JPEG/WebP/BMP/TIFF 数据，保留元数据；只有像素时无损存为 PNG。缩略图单独生成，不缩小存档原图。剪贴板不保证提供磁盘原文件；之前版本已丢失的元数据无法恢复。不做 OCR，不搜索图片中的文字；可收藏命名后按名称搜索。
 - 图片最多 2400 万像素、任一边不超过 16000 像素，并受单条字节上限约束。动画和文件复制不在支持范围内。
 
 ### 终端
@@ -78,11 +78,11 @@ Linux 已识别终端使用 Ctrl+Shift+V；Windows 使用 Ctrl+V，Mac 使用 Cm
 ## 保存与设置
 
 - 新安装使用当前用户的数据目录，见下表；旧源码目录已存在 `data/history.sqlite3` 时继续原地使用，不自动搬移。新建 POSIX 目录权限为 700，文件为 600；Windows 使用用户目录的继承 ACL，不把 chmod 当作 Windows 访问控制。
-- 普通历史默认保留 **7 天、最多 500 条**；收藏不自动删除。
-- 默认总内容容量 **100 MiB**，单条上限 **10 MiB**；设置可调整。容量包含文字、HTML、PNG 和缩略图，数据库索引额外占用空间，界面同时显示文件实际大小。
+- 普通历史默认保留 **30 天**；五档为 1 天、7 天、1 个月（30 天）、1 年（365 天）、无限期。默认不按条数删除，仍受容量限制；收藏不自动删除。
+- 默认总内容容量 **500 MiB**（524,288,000 字节），单条默认自动，受总容量约束；可手动限制。容量包含文字、HTML、原图和缩略图；数据库索引额外占用空间。菜单「空间与内存」分开显示历史容量条、文件大小和运行内存趋势。
 - 保存新规则会立即清理超限普通历史；不能把总容量降到收藏占用以下。降低单条上限只限制后续复制。
 - 外观默认跟随系统，也可选择浅色或深色。
-- **登录自启动默认关闭**。Linux 使用用户 autostart desktop 文件，Windows 使用当前用户 Run 注册表项，Mac 使用用户 LaunchAgents plist。Mac 写入后在下次登录生效。移动应用后需重新设置。真实注销/重登仍待验收。
+- **首次运行默认开启登录自启动**，设置中可关闭，关闭后不会自动重新开启。Linux 使用用户 autostart desktop 文件，Windows 使用当前用户 Run 注册表项，Mac 使用用户 LaunchAgents plist。Mac 写入后在下次登录生效。移动应用后需重新设置。真实注销/重登仍待验收。
 - 自启动目录不可写时，界面会明确提示失败；保存规则和外观仍会生效。若运行环境限制系统目录写入，请在有权限的桌面会话中运行后设置。
 
 ### 数据目录、升级与卸载
@@ -161,7 +161,7 @@ DISPLAY=:100 QT_IM_MODULE=compose CLIPBOARD_ISOLATED_TEST=1 QT_QPA_PLATFORM=xcb 
 - `content.py`：MIME 采集、图片归一化、缩略图和输出格式。
 - `monitor.py`：监听、后台处理、队列上限、暂停和取消。
 - `ui.py`：搜索面板、预览、设置和操作菜单。
-- `preferences.py`：可选自启动、系统外观读取与变化通知。
+- `preferences.py`：可关闭的默认自启动、系统外观读取与变化通知。
 - `platforms.py`、`x11.py`、`windows.py`、`macos.py`：全局快捷键、原窗口检查及系统粘贴。
 - `paths.py`、`migration.py`：用户数据目录与离线原子导入。
 - `packaging/`：PyInstaller、Inno Setup、dmg、deb 及源码收集。

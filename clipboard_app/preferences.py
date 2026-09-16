@@ -1,4 +1,4 @@
-"""Opt-in startup and system appearance on each supported desktop."""
+"""User-controllable startup and system appearance on each supported desktop."""
 
 import os
 import plistlib
@@ -177,3 +177,12 @@ if sys.platform.startswith('linux'):
 else:
     Appearance = SystemAppearance
     Autostart = WindowsAutostart if sys.platform == 'win32' else MacAutostart
+
+
+def initialize_startup(store, manager=None):
+    """Apply the requested default once; an explicit later opt-out stays off."""
+    if store.setting('startup_initialized', False):
+        return
+    manager = manager or Autostart(store.path.parent)
+    manager.set_enabled(True)
+    store.set_setting('startup_initialized', True)

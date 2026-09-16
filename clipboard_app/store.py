@@ -10,16 +10,23 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Limits:
-    days: int = 7
-    count: int = 500
-    total_bytes: int = 100 * 1024 * 1024
-    item_bytes: int = 10 * 1024 * 1024
+    days: int = 30
+    count: int = 0
+    total_bytes: int = 500 * 1024 * 1024
+    item_bytes: int = 0
 
     def validate(self):
-        if any(type(value) is not int or value <= 0 for value in asdict(self).values()):
-            raise ValueError("保存期限、条数和容量必须大于零。")
+        if any(type(value) is not int or value < 0 for value in asdict(self).values()):
+            raise ValueError("保存期限、条数和容量不能为负数。")
+        if self.total_bytes == 0:
+            raise ValueError("总容量必须大于零。")
         if self.item_bytes > self.total_bytes:
             raise ValueError("单条上限不能大于总容量。")
+
+
+    @property
+    def capture_bytes(self):
+        return min(self.item_bytes or self.total_bytes, self.total_bytes)
 
 
 @dataclass(frozen=True)
@@ -100,7 +107,14 @@ class Store:
         try:
             self._initialize()
             saved = self.setting("limits")
+            # Expand only the exact old default policy; retain custom policies.
+            old_defaults = dict(days=7, count=500, total_bytes=100 * 1048576, item_bytes=10 * 1048576)
+            if saved == old_defaults and not self.setting("defaults_v04"):
+                saved = asdict(Limits())
+                self.set_setting("limits", saved)
             self.limits = limits or (Limits(**saved) if saved else Limits())
+            self.limits.validate()
+            self.set_setting("defaults_v04", True)
             self.prune()
         except Exception:
             self.db.close()
@@ -108,9 +122,15 @@ class Store:
 
     def _initialize(self):
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1, 2):
+        if version not in (0, 1, 2, 3):
             raise ValueError("历史来自更新版本，请使用更新的应用打开。")
+        if version == 3:
+            return
         if version == 2:
+            # Original encoded images require the v0.4 reader. Prevent older
+            # releases (which assume PNG) from reopening and rewriting history.
+            with self.db:
+                self.db.execute("PRAGMA user_version = 3")
             return
         # An explicit transaction includes ALTER TABLE and all backfills. A failure
         # rolls everything back; no backup containing deleted history is retained.
@@ -139,7 +159,7 @@ class Store:
                     (row["text"] + "\n" + row["name"]).casefold(), row["id"],
                 ))
             self.db.execute("CREATE INDEX clips_kind_recent ON clips(kind,copied_at DESC)")
-            self.db.execute("PRAGMA user_version = 2")
+            self.db.execute("PRAGMA user_version = 3")
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -156,7 +176,7 @@ class Store:
         size = content.size
         if not size:
             raise ValueError("空内容不记录。")
-        if size > self.limits.item_bytes or size > self.limits.total_bytes:
+        if size > self.limits.capture_bytes:
             raise CapacityError("这条内容超过保存上限，已跳过；可在设置中调整容量。")
         digest = content.digest
         timestamp = self.clock() if copied_at is None else copied_at
@@ -231,10 +251,12 @@ class Store:
         self.db.execute('VACUUM')
 
     def _prune(self):
-        self.db.execute("DELETE FROM clips WHERE pinned=0 AND copied_at < ?", (self.clock() - self.limits.days * 86400,))
-        self.db.execute("""DELETE FROM clips WHERE id IN (
-            SELECT id FROM clips WHERE pinned=0 ORDER BY copied_at DESC,id DESC LIMIT -1 OFFSET ?
-        )""", (self.limits.count,))
+        if self.limits.days:
+            self.db.execute("DELETE FROM clips WHERE pinned=0 AND copied_at < ?", (self.clock() - self.limits.days * 86400,))
+        if self.limits.count:
+            self.db.execute("""DELETE FROM clips WHERE id IN (
+                SELECT id FROM clips WHERE pinned=0 ORDER BY copied_at DESC,id DESC LIMIT -1 OFFSET ?
+            )""", (self.limits.count,))
         total = self.usage()
         if total > self.limits.total_bytes:
             for row in self.db.execute("SELECT id,size FROM clips WHERE pinned=0 ORDER BY copied_at,id").fetchall():
@@ -252,6 +274,13 @@ class Store:
 
     def pinned_usage(self) -> int:
         return self.db.execute("SELECT COALESCE(SUM(size),0) FROM clips WHERE pinned=1").fetchone()[0]
+
+    def compact(self):
+        """Reclaim already unused pages without deleting any history."""
+        self.db.execute("VACUUM")
+
+    def release_cache(self):
+        self.db.execute("PRAGMA shrink_memory")
 
     def disk_usage(self) -> int:
         return self.path.stat().st_size

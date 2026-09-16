@@ -46,7 +46,7 @@ class HistoryTests(unittest.TestCase):
         first = self.store.add("保留")
         self.store.favorite(first, True)
         self.store.add("过期")
-        self.now += 8 * 86400
+        self.now += 31 * 86400
         self.store.prune()
         self.assertEqual([clip.text for clip in self.store.list()], ["保留"])
 
@@ -105,7 +105,7 @@ class HistoryTests(unittest.TestCase):
     def test_unpin_expired_item_applies_retention(self):
         clip_id = self.store.add("old")
         self.store.favorite(clip_id, True)
-        self.now += 8 * 86400
+        self.now += 31 * 86400
         self.store.favorite(clip_id, False)
         self.assertIsNone(self.store.get(clip_id))
 

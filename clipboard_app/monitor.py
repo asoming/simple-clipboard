@@ -110,7 +110,7 @@ class Monitor(QObject):
             self.state_changed.emit()
             return
         try:
-            value = snapshot(mime, self.store.limits.item_bytes)
+            value = snapshot(mime, self.store.limits.capture_bytes)
         except UnicodeError:
             self.notice.emit("这条文本的字符编码无法处理，已跳过。")
             return
@@ -137,7 +137,7 @@ class Monitor(QObject):
         self.queue_bytes -= size
         self.processing = True
         self.state_changed.emit()
-        self.pool.start(PrepareTask(generation, value, timestamp, self.store.limits.item_bytes, self.signals))
+        self.pool.start(PrepareTask(generation, value, timestamp, self.store.limits.capture_bytes, self.signals))
 
     def _ready(self, generation, content, timestamp, message):
         self.processing = False

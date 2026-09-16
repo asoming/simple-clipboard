@@ -21,6 +21,7 @@ from PyQt5.QtTest import QSignalSpy, QTest
 from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QSpinBox
 
 from clipboard_app.monitor import Monitor
+from clipboard_app.preferences import LinuxAutostart
 from clipboard_app.store import Store
 from clipboard_app.ui import Panel
 from clipboard_app.x11 import Target, X11
@@ -61,6 +62,7 @@ class DesktopTests(unittest.TestCase):
         self.store = Store(Path(self.db_dir.name) / "history.sqlite3")
         self.monitor = Monitor(app.clipboard(), self.store)
         self.panel = Panel(self.store, self.monitor, self.backend)
+        self.panel.autostart = LinuxAutostart(Path(self.db_dir.name), Path(self.db_dir.name) / "config")
         self.panel.show()
         QTest.qWait(80)
 

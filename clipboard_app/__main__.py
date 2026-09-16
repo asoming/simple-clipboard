@@ -17,6 +17,7 @@ from .migration import import_history
 from .paths import default_data_dir, instance_socket, launch_arguments
 from .platforms import create_backend, PlatformUnavailable
 from .store import Store
+from .preferences import initialize_startup
 from .ui import Panel, app_icon
 
 
@@ -70,6 +71,10 @@ def main() -> int:
         return 1
     monitor = Monitor(app.clipboard(), store)
     panel = Panel(store, monitor, backend)
+    try:
+        initialize_startup(store)
+    except (OSError, ValueError):
+        panel.show_notice("未能开启登录自启动，请在设置中重试。")
     import_path = None
 
     def restart_for_import(filename):

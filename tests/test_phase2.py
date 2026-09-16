@@ -71,7 +71,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertNotEqual(clip_id, other)
         self.assertEqual(self.store.add_content(content), clip_id)
 
-    def test_irrelevant_image_metadata_does_not_duplicate_pixels(self):
+    def test_image_metadata_is_preserved(self):
         image = QImage(40, 30, QImage.Format_ARGB32)
         image.fill(QColor('#47617e'))
         first = prepare(Snapshot(image=image), MIB)
@@ -79,8 +79,8 @@ class PhaseTwoTests(unittest.TestCase):
         image.setDotsPerMeterX(7000)
         image.setDevicePixelRatio(2)
         second = prepare(Snapshot(image=image), MIB)
-        self.assertEqual(first.digest, second.digest)
-        self.assertEqual(QImage.fromData(second.image).textKeys(), [])
+        self.assertNotEqual(first.digest, second.digest)
+        self.assertEqual(QImage.fromData(second.image).text("Author"), "Synthetic author")
 
     def test_html_only_gets_searchable_text(self):
         content = prepare(Snapshot(html='<p>中文 <b>Hello</b></p>'), MIB)
@@ -179,7 +179,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertTrue(self.store.setting('paused'))
         self.assertEqual(self.store.summaries('旧收藏')[0].id, 42)
         self.assertEqual(self.store.add(clip.text), 42)
-        self.assertEqual(self.store.db.execute('PRAGMA user_version').fetchone()[0], 2)
+        self.assertEqual(self.store.db.execute('PRAGMA user_version').fetchone()[0], 3)
 
     def test_partial_schema_migration_rolls_back(self):
         self.create_legacy(broken=True)

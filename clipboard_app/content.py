@@ -1,4 +1,4 @@
-"""Capture on the GUI thread; decode and normalize raster images in a worker."""
+"""Capture original image bytes; decode only for validation and thumbnails."""
 
 from dataclasses import dataclass
 
@@ -33,8 +33,8 @@ def snapshot(mime: QMimeData, limit: int) -> Snapshot | None:
         return None
     if mime.hasUrls() and any(url.isLocalFile() for url in mime.urls()):
         return None
-    for image_type in RASTER_TYPES:
-        if image_type in formats:
+    for image_type in mime.formats():
+        if image_type in RASTER_TYPES:
             data = bytes(mime.data(image_type))
             if len(data) > limit:
                 raise CapacityError("图片超过单条保存上限，已跳过。可在设置中调整。")
@@ -86,13 +86,9 @@ def prepare(value: Snapshot, limit: int) -> Content:
         if image.isNull():
             raise ValueError("图片格式损坏或暂不支持，已跳过。")
         check_dimensions(image.width(), image.height())
-        image = image.convertToFormat(QImage.Format_ARGB32)
-        # Copy pixels into a fresh image to drop author/DPI metadata. Preserve the
-        # color profile because it affects how those pixels should be displayed.
-        canonical = QImage(image.constBits(), image.width(), image.height(), image.bytesPerLine(), image.format()).copy()
-        canonical.setColorSpace(image.colorSpace())
-        image = canonical
-        data = png_bytes(image)
+        # Encoded data is retained byte-for-byte, including metadata. A clipboard
+        # offering only pixels has no original file; PNG preserves those pixels.
+        data = png_bytes(image) if isinstance(value.image, QImage) else value.image
         thumb = png_bytes(image.scaled(160, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         result = Content(image=data, thumbnail=thumb, width=image.width(), height=image.height())
     else:
@@ -107,6 +103,15 @@ def prepare(value: Snapshot, limit: int) -> Content:
     return result
 
 
+def decoded_image(data: bytes) -> QImage:
+    buffer = QBuffer()
+    buffer.setData(QByteArray(data))
+    buffer.open(QIODevice.ReadOnly)
+    reader = QImageReader(buffer)
+    reader.setAutoTransform(True)
+    return reader.read()
+
+
 def as_mime(content: Content, plain: bool = False) -> QMimeData:
     mime = QMimeData()
     if content.image:
@@ -114,8 +119,18 @@ def as_mime(content: Content, plain: bool = False) -> QMimeData:
             raise ValueError("图片没有纯文本内容。")
         # PNG is a standard X11 target; Qt supplies other formats on request when
         # its image representation is present. Decode only when the user copies.
-        mime.setData("image/png", content.image)
-        mime.setImageData(QImage.fromData(content.image, "PNG"))
+        buffer = QBuffer()
+        buffer.setData(QByteArray(content.image))
+        buffer.open(QIODevice.ReadOnly)
+        reader = QImageReader(buffer)
+        reader.setAutoTransform(True)
+        format_name = bytes(reader.format()).decode("ascii").lower()
+        image_type = {"jpg": "jpeg", "tif": "tiff"}.get(format_name, format_name)
+        mime.setData("image/" + image_type, content.image)
+        image = reader.read()
+        if image.isNull():
+            raise ValueError("图片无法解码。")
+        mime.setImageData(image)
     else:
         mime.setText(content.text)
         if content.html and not plain:
