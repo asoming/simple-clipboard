@@ -74,7 +74,7 @@ def main() -> int:
     try:
         initialize_startup(store)
     except (OSError, ValueError):
-        panel.show_notice("未能开启登录自启动，请在设置中重试。")
+        panel.recording_notice("未能开启登录自启动，请在设置中重试。")
     import_path = None
 
     def restart_for_import(filename):
@@ -97,7 +97,7 @@ def main() -> int:
     server.newConnection.connect(reveal)
     if not server.listen(socket_name):
         panel.show_notice("重复启动时无法自动打开窗口，请使用全局快捷键。")
-    if not args.hidden or panel.shortcut_error:
+    if not args.hidden or panel.shortcut_error or panel.pending_notice:
         panel.open_panel()
 
     def report_error(error_type, error, traceback):

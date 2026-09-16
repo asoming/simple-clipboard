@@ -674,18 +674,6 @@ class Panel(QWidget):
             self.dismiss()
         event.ignore()
 
-    def mouseDoubleClickEvent(self, event):
-        index = self.indexAt(event.pos())
-        if index.isValid():
-            from PyQt5.QtWidgets import QStyleOptionViewItem
-            option = QStyleOptionViewItem()
-            option.rect = self.visualRect(index)
-            option.font = self.font()
-            if self.itemDelegate().star_rect(option, index).contains(event.pos()):
-                event.accept()
-                return
-        super().mouseDoubleClickEvent(event)
-
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self.dismiss()

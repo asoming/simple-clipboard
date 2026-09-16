@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
-from PyQt5.QtCore import QBuffer, QIODevice, Qt
-from PyQt5.QtGui import QColor, QImage
+from PyQt5.QtCore import QBuffer, QIODevice, QPointF, QEvent, Qt
+from PyQt5.QtGui import QColor, QImage, QMouseEvent
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QStyleOptionViewItem
 
@@ -108,6 +108,13 @@ class HistoryFeatureTests(unittest.TestCase):
         panel.show()
         app.processEvents()
         try:
+            # Double-clicking window chrome/blank space must use QWidget behavior.
+            panel.mouseDoubleClickEvent(QMouseEvent(QEvent.MouseButtonDblClick, QPointF(8, 8),
+                                                    Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+            panel.shortcut_error = ""
+            panel.recording_notice("Synthetic startup failure")
+            panel.open_panel()
+            self.assertEqual(panel.notice.text(), "Synthetic startup failure")
             groups = [panel.history.item(i).data(Qt.UserRole + 2) for i in range(4)]
             self.assertTrue(groups[0].startswith('今天'))
             self.assertIsNone(groups[1])
