@@ -8,16 +8,16 @@ from datetime import datetime, timedelta
 from PyQt5.QtCore import QEvent, QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextLayout, QTextOption
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
     QInputDialog, QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMenu,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QShortcut, QSpinBox, QStackedWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QShortcut, QStackedWidget,
     QFrame, QSizePolicy, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .monitor import Monitor
 from .preferences import Appearance, Autostart
 from .platforms import Target
-from .store import Clip, Limits, Store
+from .store import Clip, Store
 
 
 def app_icon() -> QIcon:
@@ -473,9 +473,13 @@ class Panel(QWidget):
             QLineEdit {{ background: {canvas}; border: 1px solid {line}; border-radius: 8px; padding: 8px 12px; }}
             QLineEdit:focus {{ background: {surface}; border-color: {accent}; }}
             QComboBox, QSpinBox {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 6px 10px; }}
-            QComboBox#pasteMode {{ padding-right: 30px; }}
-            QComboBox#pasteMode::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
-            QComboBox#pasteMode::down-arrow {{ image: none; }}
+            QComboBox#pasteMode, QComboBox#settingsChoice {{ padding-right: 30px; }}
+            QComboBox#pasteMode::drop-down, QComboBox#settingsChoice::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
+            QComboBox#pasteMode::down-arrow, QComboBox#settingsChoice::down-arrow {{ image: none; }}
+            QSpinBox#settingsNumber {{ padding-right: 26px; }}
+            QSpinBox#settingsNumber::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 24px; border: none; background: transparent; }}
+            QSpinBox#settingsNumber::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 24px; border: none; background: transparent; }}
+            QSpinBox#settingsNumber::up-arrow, QSpinBox#settingsNumber::down-arrow {{ image: none; }}
             QComboBox:focus, QSpinBox:focus {{ border-color: {accent}; }}
             QComboBox QAbstractItemView {{ background: {surface}; color: {ink}; selection-background-color: {selection}; selection-color: {ink}; }}
             QListWidget {{ background: {surface}; border: none; outline: none; }}
@@ -830,96 +834,8 @@ class Panel(QWidget):
             self.show_notice(f"快捷键已设为 {value}")
 
     def settings(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("设置")
-        dialog.resize(440, 480)
-        layout = QVBoxLayout(dialog)
-        form = QFormLayout()
-        fields = []
-        limits = self.store.limits
-        retention = QComboBox()
-        retention.setAccessibleName("保留时间")
-        for label, days in (("1 天", 1), ("7 天", 7), ("1 个月（30 天）", 30), ("1 年（365 天）", 365), ("无限期", 0)):
-            retention.addItem(label, days)
-        # Show a legacy custom policy without silently shortening its duration.
-        index = retention.findData(limits.days)
-        if index < 0:
-            retention.addItem(f"原设置：{limits.days} 天", limits.days)
-            index = retention.count() - 1
-        retention.setCurrentIndex(index)
-        form.addRow("保留时间", retention)
-        for label, value, maximum in (("普通历史条数", limits.count, 100000),
-                                      ("总内容容量（MiB）", limits.total_bytes // 1048576, 10240),
-                                      ("单条上限（MiB）", limits.item_bytes // 1048576, 10240)):
-            field = QSpinBox()
-            field.setRange(1 if label == "总内容容量（MiB）" else 0, maximum)
-            field.setSpecialValueText("自动（受总容量约束）" if "单条" in label else "不限制条数")
-            field.setValue(value)
-            field.setAccessibleName(label)
-            form.addRow(label, field)
-            fields.append(field)
-        theme = QComboBox()
-        for label, value in (("跟随系统", "system"), ("浅色", "light"), ("深色", "dark")):
-            theme.addItem(label, value)
-        theme.setCurrentIndex(max(0, theme.findData(self.store.setting("theme", "system"))))
-        theme.setAccessibleName("外观")
-        form.addRow("外观", theme)
-        shortcut = QPushButton(self.shortcut + " · 修改")
-        shortcut.clicked.connect(lambda: (self.change_shortcut(), shortcut.setText(self.shortcut + " · 修改")))
-        form.addRow("全局快捷键", shortcut)
-        startup = QCheckBox("登录桌面后在后台启动")
-        try:
-            startup.setChecked(self.autostart.enabled())
-        except (OSError, ValueError):
-            startup.setEnabled(False)
-            startup.setToolTip("无法读取系统自启动目录。")
-        form.addRow("启动", startup)
-        layout.addLayout(form)
-        usage = QLabel(f"内容 {self.store.usage() / 1048576:.2f} MiB · 数据库文件 {self.store.disk_usage() / 1048576:.2f} MiB\n"
-                       "容量按文字、HTML、图片和缩略图计算，数据库索引会额外占用空间。\n\n"
-                       "无限期仅取消时间限制；超容量仍清理最旧的普通记录。收藏不自动清理。\n"
-                       "图片保留来源提供的原始数据，仅缩略图缩小；解码最多 2400 万像素。\n"
-                       "保存更短期限或更小容量后立即清理普通历史，删除无法恢复。")
-        usage.setWordWrap(True)
-        layout.addWidget(usage)
-        error_label = QLabel()
-        error_label.setWordWrap(True)
-        error_label.setObjectName("notice")
-        error_label.hide()
-        layout.addWidget(error_label)
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText("保存")
-        buttons.button(QDialogButtonBox.Cancel).setText("取消")
-        def save():
-            days = retention.currentData()
-            count, total, item = (field.value() for field in fields)
-            try:
-                new_limits = Limits(days, count, total * 1048576, item * 1048576)
-                if new_limits != self.store.limits:
-                    self.store.set_limits(new_limits)
-                    self.monitor.cancel_pending()
-                self.store.set_setting("theme", theme.currentData())
-                self._style()
-                self.refresh()
-            except ValueError as error:
-                error_label.setText(str(error))
-                error_label.show()
-                return
-            try:
-                # Saving an enabled entry also refreshes a path left by an old
-                # source launcher or a moved installation.
-                if startup.isEnabled() and (startup.isChecked() or self.autostart.enabled()):
-                    self.autostart.set_enabled(startup.isChecked())
-                self.store.set_setting("startup_initialized", True)
-            except (OSError, ValueError):
-                error_label.setText("保存规则和外观已更新，但无法修改自启动文件。请检查目录权限后重试，或取消勾选自启动。")
-                error_label.show()
-                return
-            dialog.accept()
-            self.show_notice("设置已保存。")
-        buttons.accepted.connect(save)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        from .settings_dialog import SettingsDialog
+        dialog = SettingsDialog(self)
         dialog.exec_()
         dialog.deleteLater()
 

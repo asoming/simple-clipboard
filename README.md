@@ -1,25 +1,25 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.4.0 工程预览 · GPL-3.0
+本地桌面剪贴板管理器 · 0.4.1 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色界面，使用自造示例](docs/images/date-groups.png)
 
-0.4.0 加入日期分组、行尾星标、30 天 / 500 MiB 默认规则、原始图片保存、默认登录启动，以及空间和内存图。见 [本轮验收](docs/历史管理验收报告.md)。
+0.4.1 修复设置窗口中文裁切：统一字体、按文字尺寸排列控件、内容滚动、保存按钮固定。保留日期分组、原图和空间管理功能。见 [修复验收](docs/设置窗口修复验收.md)。
 
 ## 安装与启动
 
-从 [Releases 下载 0.4.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.4.0-preview.1)：
+从 [Releases 下载 0.4.1 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.4.1-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/SimpleClipboard-0.4.0-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.4.0-preview.1/simple-clipboard_0.4.0-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/simple-clipboard_0.4.1-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.4.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.4.1-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
