@@ -18,6 +18,7 @@ from .monitor import Monitor
 from .preferences import Appearance, Autostart
 from .platforms import Target
 from .store import Clip, Store
+from .widgets import WrappedLabel
 
 
 def app_icon() -> QIcon:
@@ -399,7 +400,7 @@ class Panel(QWidget):
         self.paste_mode.setToolTip("原格式保留图片或 HTML；纯文本只输出文字。两者都适用于「仅复制」。")
         utilities.addWidget(self.paste_mode)
         root.addLayout(utilities)
-        self.notice = QLabel()
+        self.notice = WrappedLabel()
         self.notice.setWordWrap(True)
         self.notice.setObjectName("notice")
         self.notice.hide()

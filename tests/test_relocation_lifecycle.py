@@ -27,7 +27,9 @@ CHILD = textwrap.dedent(r'''
     from clipboard_app.store import Store
     from clipboard_app.ui import Panel
 
-    root, mode = Path(sys.argv[1]), sys.argv[2]
+    # Match the app's canonical paths: macOS /var may be a symlink and
+    # Windows temporary directories may use an 8.3 alias such as RUNNER~1.
+    root, mode = Path(sys.argv[1]).resolve(), sys.argv[2]
     source, destination = root / 'source', root / 'destination'
     preference = root / 'config' / 'location.json'
     result = {'messages': [], 'restart': None, 'cancelled': 0, 'stopped': False}

@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 from clipboard_app.settings_dialog import SettingsDialog
+from clipboard_app.platforms import paste_timeout_message
 from clipboard_app.storage_view import StorageDialog
 from clipboard_app.store import Store
 from clipboard_app.ui import Panel
@@ -260,5 +261,45 @@ class FolderSettingsTests(unittest.TestCase):
                                 app.processEvents()
                                 self.check_dialog_layout(dialog)
                                 dialog.hide()
+        finally:
+            app.setFont(original_font)
+
+    def test_storage_wrapping_reflows_with_fallback_font_and_dynamic_results(self):
+        original_font = QFont(app.font())
+        try:
+            app.setFont(QFont('DejaVu Sans', 26))
+            with patch('clipboard_app.ui.QFontDatabase.families', return_value=[]), self.fixture() as (panel, store, root):
+                dialog = StorageDialog(store, panel)
+                for width in (440, 720, 440):
+                    with self.subTest(width=width):
+                        dialog.resize(width, 400)
+                        dialog.show()
+                        app.processEvents()
+                        self.assertGreaterEqual(dialog.legend.font().pointSizeF(), 24)
+                        self.check_dialog_layout(dialog)
+                        dialog.result.setText('测试操作结果：当前记录保留，请检查上方读数。' * 3)
+                        app.processEvents()
+                        self.check_dialog_layout(dialog)
+                        dialog.result.setText('已完成。')
+                        app.processEvents()
+                        self.check_dialog_layout(dialog)
+        finally:
+            app.setFont(original_font)
+
+    def test_paste_timeout_notice_keeps_every_line_with_fallback_font(self):
+        original_font = QFont(app.font())
+        try:
+            app.setFont(QFont('DejaVu Sans', 26))
+            with patch('clipboard_app.ui.QFontDatabase.families', return_value=[]), self.fixture() as (panel, store, root):
+                panel.resize(440, 460)
+                for target_ready in (True, False):
+                    with self.subTest(target_ready=target_ready):
+                        panel.paste_failed(paste_timeout_message(target_ready))
+                        app.processEvents()
+                        notice = panel.notice
+                        self.assertGreaterEqual(notice.font().pointSizeF(), 20)
+                        self.assertGreaterEqual(notice.height(), notice.heightForWidth(notice.width()))
+                        self.assertTrue(panel.rect().contains(notice.geometry()))
+                        self.assertLess(notice.geometry().bottom(), panel.copy_button.geometry().top())
         finally:
             app.setFont(original_font)

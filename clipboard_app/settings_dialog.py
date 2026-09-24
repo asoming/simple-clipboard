@@ -7,13 +7,14 @@ from PyQt5.QtCore import QPointF, Qt, QTimer
 from PyQt5.QtGui import QFont, QIcon, QPainter, QPalette, QPen
 from PyQt5.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
-    QLabel, QLayout, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
+    QLayout, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
     QStyle, QStyleOptionButton, QStyleOptionComboBox, QStyleOptionSpinBox,
     QStyleOptionFrame, QVBoxLayout, QWidget,
 )
 
 from .store import Limits
 from .ui import FormatComboBox
+from .widgets import WrappedLabel
 
 
 def fit_control(widget, text):
@@ -216,13 +217,8 @@ class SettingsDialog(QDialog):
 
     @staticmethod
     def note(text, name, layout):
-        label = QLabel(text)
+        label = WrappedLabel(text)
         label.setObjectName(name)
-        label.setWordWrap(True)
-        policy = label.sizePolicy()
-        policy.setVerticalPolicy(QSizePolicy.Minimum)
-        policy.setHeightForWidth(True)
-        label.setSizePolicy(policy)
         layout.addWidget(label)
         return label
 

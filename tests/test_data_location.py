@@ -22,7 +22,9 @@ from clipboard_app.store import Content, Store
 class DataLocationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        # macOS /var and Windows short temp paths can name the same directory
+        # differently from the canonical paths saved by a directory move.
+        self.root = Path(self.temporary.name).resolve()
         self.config = self.root / "config" / "location.json"
         self.destination = self.root / "新位置 with spaces"
         self.store = Store(self.root / "source" / "history.sqlite3", clock=lambda: 100000)
