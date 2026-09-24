@@ -33,7 +33,7 @@ class LinuxAutostart:
         self.data_dir = data_dir.resolve()
 
     def document(self) -> str:
-        command = ' '.join(exec_argument(arg) for arg in launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)])
+        command = ' '.join(exec_argument(arg) for arg in launch_arguments() + ['--hidden', '--require-history', '--data-dir', str(self.data_dir)])
         return ('[Desktop Entry]\nType=Application\nName=剪贴板\n'
                 f'Exec={command}\nTerminal=false\n{MARKER}\n')
 
@@ -71,7 +71,7 @@ class MacAutostart:
         self.path = directory / (self.label + '.plist')
 
     def document(self):
-        return {'Label': self.label, 'ProgramArguments': launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)], 'RunAtLoad': True}
+        return {'Label': self.label, 'ProgramArguments': launch_arguments() + ['--hidden', '--require-history', '--data-dir', str(self.data_dir)], 'RunAtLoad': True}
 
     def enabled(self):
         if not self.path.exists():
@@ -116,7 +116,7 @@ class WindowsAutostart:
         self.key = registry_key or r'Software\Microsoft\Windows\CurrentVersion\Run'
 
     def document(self):
-        return subprocess.list2cmdline(launch_arguments() + ['--hidden', '--data-dir', str(self.data_dir)])
+        return subprocess.list2cmdline(launch_arguments() + ['--hidden', '--require-history', '--data-dir', str(self.data_dir)])
 
     def enabled(self):
         r = self.registry

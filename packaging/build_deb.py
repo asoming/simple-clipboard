@@ -30,8 +30,8 @@ def main():
         desktop.write_text('[Desktop Entry]\nType=Application\nName=剪贴板\nName[en]=Simple Clipboard\nExec=simple-clipboard\nIcon=edit-paste\nTerminal=false\nCategories=Utility;\n', encoding='utf-8')
         control = stage / 'DEBIAN/control'
         control.parent.mkdir()
-        control.write_text('Package: simple-clipboard\nVersion: 0.4.1~preview1\nSection: utils\nPriority: optional\nArchitecture: all\nMaintainer: asoming <185788094+asoming@users.noreply.github.com>\nDepends: python3 (>= 3.10), python3-pyqt5, python3-gi, libx11-6, libxtst6\nHomepage: https://github.com/asoming/simple-clipboard\nDescription: Local clipboard history for Ubuntu X11\n Text, HTML and images with local search and optional global paste.\n')
-        subprocess.run(['dpkg-deb', '--root-owner-group', '--build', str(stage), str(OUTPUT / 'simple-clipboard_0.4.1-preview1_all.deb')], check=True)
+        control.write_text('Package: simple-clipboard\nVersion: 0.5.0~preview1\nSection: utils\nPriority: optional\nArchitecture: all\nMaintainer: asoming <185788094+asoming@users.noreply.github.com>\nDepends: python3 (>= 3.10), python3-pyqt5, python3-gi, libx11-6, libxtst6\nHomepage: https://github.com/asoming/simple-clipboard\nDescription: Local clipboard history for Ubuntu X11\n Text, HTML and images with local search and optional global paste.\n')
+        subprocess.run(['dpkg-deb', '--root-owner-group', '--build', str(stage), str(OUTPUT / 'simple-clipboard_0.5.0-preview1_all.deb')], check=True)
 
 
 if __name__ == '__main__':

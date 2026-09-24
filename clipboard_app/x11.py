@@ -1,7 +1,10 @@
 """X11 hotkeys and verified focus restoration. No shell commands or clipboard reads."""
 
 import ctypes as C
-from .platforms import PlatformUnavailable, Target
+from .platforms import (
+    PASTE_CHECK_INTERVAL_MS, PASTE_MAX_ATTEMPTS, PlatformUnavailable, Target,
+    paste_timeout_message,
+)
 
 from PyQt5.QtCore import QObject, QSocketNotifier, QTimer, pyqtSignal
 
@@ -77,7 +80,7 @@ class X11(QObject):
         self.pending_target = None
         self.paste_attempts = 0
         self.paste_timer = QTimer(self)
-        self.paste_timer.setInterval(30)
+        self.paste_timer.setInterval(PASTE_CHECK_INTERVAL_MS)
         self.paste_timer.timeout.connect(self._finish_paste)
 
     default_shortcut = "Ctrl+Alt+V"
@@ -259,6 +262,7 @@ class X11(QObject):
 
     def paste(self, target: Target | None):
         self.paste_timer.stop()
+        self.pending_target = None
         if target is None:
             self.paste_failed.emit("内容已复制。未找到原输入窗口，请回到目标位置手动粘贴。")
             return
@@ -281,9 +285,12 @@ class X11(QObject):
         return False
 
     def _finish_paste(self):
-        self.paste_attempts += 1
         target = self.pending_target
-        if target and self.belongs_to(self.focus(), target.window) and not self.modifiers_pressed():
+        if target is None:
+            return
+        self.paste_attempts += 1
+        target_ready = self.belongs_to(self.focus(), target.window)
+        if target_ready and not self.modifiers_pressed():
             self.paste_timer.stop()
             keys = ["Control_L", "Shift_L", "v"] if target.terminal else ["Control_L", "v"]
             # Never synthesize Return/Enter: pasting must not submit a message or command.
@@ -294,10 +301,10 @@ class X11(QObject):
             self.lib.XFlush(self.display)
             self.pending_target = None
             self.paste_requested.emit()
-        elif self.paste_attempts >= 25:
+        elif self.paste_attempts >= PASTE_MAX_ATTEMPTS:
             self.paste_timer.stop()
             self.pending_target = None
-            self.paste_failed.emit("内容已复制，但未能安全返回原输入窗口。请手动粘贴。")
+            self.paste_failed.emit(paste_timeout_message(target_ready))
 
     def close(self):
         self.paste_timer.stop()

@@ -208,7 +208,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertTrue(valid)
         # Percent field codes are expanded by desktop launchers, not shell_parse_argv.
         self.assertEqual(argv[-1].replace('%%', '%'), str(startup.data_dir))
-        self.assertEqual(argv[-3:-1], ['--hidden', '--data-dir'])
+        self.assertEqual(argv[-4:-1], ['--hidden', '--require-history', '--data-dir'])
         startup.set_enabled(False)
         self.assertFalse(startup.path.exists())
         startup.path.write_text('[Desktop Entry]\nName=Other\n')

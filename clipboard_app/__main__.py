@@ -6,7 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, Qt
+from PyQt5.QtCore import QProcess, Qt, QTimer
 from PyQt5.QtNetwork import QLocalServer, QLocalSocket
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
@@ -14,6 +14,7 @@ from .monitor import Monitor
 from .input_method import prepare_input_method
 from .instance import InstanceLock
 from .migration import import_history
+from .data_location import prepare_startup_move, validate_history_directory
 from .paths import default_data_dir, instance_socket, launch_arguments
 from .platforms import create_backend, PlatformUnavailable
 from .store import Store
@@ -24,6 +25,7 @@ from .ui import Panel, app_icon
 def main() -> int:
     parser = argparse.ArgumentParser(description="简洁的本地剪贴板管理器")
     parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--require-history", action="store_true", help="仅打开已有历史，数据盘离线时不新建数据库")
     parser.add_argument("--hidden", action="store_true", help="在后台启动，通过快捷键打开")
     parser.add_argument("--import-history", type=Path, help="退出旧版后，将数据库导入空历史目录；原文件保留")
     parser.add_argument("--smoke-test", type=Path, metavar="REPORT", help="使用临时数据检查启动，将结果写入报告；不监听剪贴板")
@@ -39,11 +41,18 @@ def main() -> int:
     if args.smoke_test:
         from .smoke import run
         return run(app, args.smoke_test)
-    data_dir = (args.data_dir or default_data_dir()).resolve()
-    data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lock = InstanceLock(data_dir / "instance.lock")
-    socket_name = instance_socket(data_dir)
-    if not lock.acquire():
+    try:
+        data_dir = (args.data_dir or default_data_dir()).resolve()
+        if args.require_history:
+            validate_history_directory(data_dir)
+        data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock = InstanceLock(data_dir / "instance.lock")
+        acquired = lock.acquire()
+        socket_name = instance_socket(data_dir)
+    except (OSError, ValueError) as error:
+        QMessageBox.critical(None, '无法打开保存文件夹', str(error))
+        return 1
+    if not acquired:
         if args.import_history:
             QMessageBox.warning(None, "无法导入", "请先退出当前版本，再导入旧历史。")
             return 1
@@ -70,7 +79,23 @@ def main() -> int:
         lock.release()
         return 1
     monitor = Monitor(app.clipboard(), store)
-    panel = Panel(store, monitor, backend)
+    directory_move = None
+
+    def relocate_history(destination):
+        nonlocal directory_move
+        paused = monitor.paused
+        monitor.cancel_pending()
+        monitor.paused = True
+        panel.cleanup_timer.stop()
+        try:
+            directory_move = prepare_startup_move(store, destination, panel.autostart)
+        except (OSError, sqlite3.Error, ValueError):
+            monitor.paused = paused
+            panel.cleanup_timer.start()
+            raise
+        QTimer.singleShot(0, app.quit)
+
+    panel = Panel(store, monitor, backend, relocate_history=relocate_history)
     try:
         initialize_startup(store)
     except (OSError, ValueError):
@@ -114,6 +139,15 @@ def main() -> int:
         backend.close()
     store.close()
     lock.release()
+    if directory_move:
+        destination = directory_move.destination
+        directory_move.close()
+        command = launch_arguments() + ['--require-history', '--data-dir', str(destination)]
+        started, _ = QProcess.startDetached(command[0], command[1:])
+        if not started:
+            QMessageBox.critical(None, '请手动重新打开',
+                                 '历史已保存到新文件夹，但未能自动重启。请手动打开应用；原目录仍保留备份。')
+            return 1
     if import_path:
         command = launch_arguments() + ['--data-dir', str(data_dir), '--import-history', import_path]
         started, _ = QProcess.startDetached(command[0], command[1:])

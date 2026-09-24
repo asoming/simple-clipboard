@@ -1,25 +1,25 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.4.1 工程预览 · GPL-3.0
+本地桌面剪贴板管理器 · 0.5.0 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色界面，使用自造示例](docs/images/date-groups.png)
 
-0.4.1 修复设置窗口中文裁切：统一字体、按文字尺寸排列控件、内容滚动、保存按钮固定。保留日期分组、原图和空间管理功能。见 [修复验收](docs/设置窗口修复验收.md)。
+0.5.0 支持更换历史保存文件夹，并修复后台面板沿用旧粘贴目标的问题。自动粘贴失败会区分焦点未返回与修饰键未松开。见 [目录与粘贴验收](docs/保存目录与粘贴修复验收.md)。
 
 ## 安装与启动
 
-从 [Releases 下载 0.4.1 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.4.1-preview.1)：
+从 [Releases 下载 0.5.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.5.0-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/SimpleClipboard-0.4.1-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.4.1-preview.1/simple-clipboard_0.4.1-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/simple-clipboard_0.5.0-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.4.1-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.5.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
@@ -56,6 +56,7 @@ Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，
 | 修改收藏名称、删除 | 右键记录；Ctrl+Delete 删除当前记录 |
 | 暂停、忽略下一次复制 | 右上角「···」 |
 | 快捷键、外观、自启动、保存规则 | 「··· → 设置」 |
+| 更改历史保存文件夹 | 「··· → 设置 → 保存文件夹」，或从「空间与内存」进入 |
 | 存储与隐私说明、清空历史、退出 | 「···」菜单 |
 
 Mac 的面板内 Ctrl 快捷键对应 Cmd，例如 Cmd+Enter 仅复制。
@@ -76,6 +77,16 @@ Linux 已识别终端使用 Ctrl+Shift+V；Windows 使用 Ctrl+V，Mac 使用 Cm
 自动粘贴依赖目标应用支持对应格式和快捷键。无法确认原窗口焦点时，显示手动粘贴提示；发送快捷键不等于目标应用已接收内容。
 
 ## 保存与设置
+
+### 更换保存文件夹
+
+选择「保存文件夹 → 选择文件夹…」，然后「保存并重启」。应用会复制并校验当前历史、收藏、原图及设置，更新已开启的登录启动位置，再重启使用新目录。关闭的自启动保持关闭。
+
+原目录保留备份，不自动删除；目标目录已有历史数据库或事务文件时会拒绝覆盖。迁移失败会尝试恢复原配置，并显示具体原因。所选目录或数据盘不可用时会明确报错，不会静默创建空历史。Linux/macOS 的迁移目标需支持原子硬链接，Windows 使用同目录原子重命名；不支持的文件系统会安全失败。
+
+目录偏好单独保存在 Linux 的 `$XDG_CONFIG_HOME/simple-clipboard/location.json`（默认 `~/.config`）、Windows 的 `%APPDATA%/SimpleClipboard/location.json`、macOS 的 `~/Library/Application Support/SimpleClipboard/location.json`。显式 `--data-dir` 仍可指定独立数据目录；受管理的登录启动与迁移重启增加 `--require-history`，仅打开已有历史。
+
+### 容量与保留规则
 
 - 新安装使用当前用户的数据目录，见下表；旧源码目录已存在 `data/history.sqlite3` 时继续原地使用，不自动搬移。新建 POSIX 目录权限为 700，文件为 600；Windows 使用用户目录的继承 ACL，不把 chmod 当作 Windows 访问控制。
 - 普通历史默认保留 **30 天**；五档为 1 天、7 天、1 个月（30 天）、1 年（365 天）、无限期。默认不按条数删除，仍受容量限制；收藏不自动删除。
@@ -161,7 +172,8 @@ DISPLAY=:100 QT_IM_MODULE=compose CLIPBOARD_ISOLATED_TEST=1 QT_QPA_PLATFORM=xcb 
 - `content.py`：MIME 采集、图片归一化、缩略图和输出格式。
 - `monitor.py`：监听、后台处理、队列上限、暂停和取消。
 - `ui.py`：搜索面板、预览和操作菜单。
-- `settings_dialog.py`：设置表单、字体尺寸适配和固定操作区。
+- `settings_dialog.py`：设置表单、保存目录选择、字体尺寸适配和固定操作区。
+- `data_location.py`：目录偏好、无覆盖数据复制、自启动更新与回退。
 - `preferences.py`：可关闭的默认自启动、系统外观读取与变化通知。
 - `platforms.py`、`x11.py`、`windows.py`、`macos.py`：全局快捷键、原窗口检查及系统粘贴。
 - `paths.py`、`migration.py`：用户数据目录与离线原子导入。

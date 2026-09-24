@@ -9,8 +9,13 @@ from collections import deque
 from pathlib import Path
 
 from PyQt5.QtCore import QPointF, QRectF, QTimer, Qt
-from PyQt5.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmapCache
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmapCache
+from PyQt5.QtWidgets import (
+    QDialog, QDialogButtonBox, QFrame, QLabel, QLayout, QLineEdit,
+    QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+)
+
+from .settings_dialog import fit_control
 
 
 MIB = 1048576
@@ -99,9 +104,20 @@ class StorageDialog(QDialog):
         super().__init__(parent)
         self.store = store
         self.setWindowTitle('空间与内存')
+        if parent is not None:
+            self.setFont(QFont(parent.font()))
+        self.setMinimumSize(360, 280)
         self.resize(460, 520)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 16)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.body = QWidget()
+        layout = QVBoxLayout(self.body)
+        layout.setContentsMargins(0, 0, 12, 0)
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
         layout.setSpacing(12)
         self.space = QLabel()
         self.space.setWordWrap(True)
@@ -111,11 +127,23 @@ class StorageDialog(QDialog):
         self.legend = QLabel()
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
+        layout.addWidget(QLabel('历史保存文件夹'))
+        self.folder_path = QLineEdit(str(store.path.parent.resolve()))
+        self.folder_path.setReadOnly(True)
+        self.folder_path.setAccessibleName('历史保存文件夹')
+        self.folder_path.setToolTip(self.folder_path.text())
+        self.folder_path.setCursorPosition(0)
+        layout.addWidget(self.folder_path)
+        self.folder_button = QPushButton('修改保存文件夹…')
+        self.folder_button.setEnabled(parent is not None)
+        self.folder_button.clicked.connect(self.change_folder)
+        layout.addWidget(self.folder_button)
         compact = QPushButton('回收历史文件空闲空间')
         compact.setToolTip('整理数据库已空出的页面，保留全部现有记录和收藏。')
         compact.clicked.connect(self.compact)
         layout.addWidget(compact)
         self.memory = QLabel()
+        self.memory.setWordWrap(True)
         layout.addWidget(self.memory)
         self.chart = MemoryChart()
         layout.addWidget(self.chart)
@@ -125,16 +153,33 @@ class StorageDialog(QDialog):
         release = QPushButton('释放可回收缓存')
         release.clicked.connect(self.release_cache)
         layout.addWidget(release)
-        note = QLabel('历史容量使用磁盘，运行内存由系统分配。释放缓存不删除历史，内存占用不一定立即下降。删除记录请使用主菜单「清空历史」。')
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.note = QLabel('历史容量使用磁盘，运行内存由系统分配。释放缓存不删除历史，内存占用不一定立即下降。删除记录请使用主菜单「清空历史」。')
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
         self.result = QLabel()
         self.result.setWordWrap(True)
         layout.addWidget(self.result)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.button(QDialogButtonBox.Close).setText('关闭')
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        for label in self.body.findChildren(QLabel):
+            policy = label.sizePolicy()
+            policy.setVerticalPolicy(QSizePolicy.Minimum)
+            policy.setHeightForWidth(label.wordWrap())
+            label.setSizePolicy(policy)
+        layout.addStretch()
+        self.scroll.setWidget(self.body)
+        root.addWidget(self.scroll, 1)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.buttons.button(QDialogButtonBox.Close).setText('关闭')
+        self.buttons.button(QDialogButtonBox.Close).setIcon(QIcon())
+        self.buttons.rejected.connect(self.reject)
+        root.addWidget(self.buttons)
+        self.ensurePolished()
+        fit_control(self.folder_path, '历史保存文件夹')
+        for button in (self.folder_button, compact, release, *self.buttons.buttons()):
+            fit_control(button, button.text())
+        self.buttons.button(QDialogButtonBox.Close).setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.body.layout().activate()
+        root.activate()
+        self.setMinimumWidth(max(360, self.body.minimumSizeHint().width() + 60))
         self.timer = QTimer(self)
         self.timer.setInterval(2000)
         self.timer.timeout.connect(self.update_memory)
@@ -142,6 +187,10 @@ class StorageDialog(QDialog):
         self.update_space()
         self.update_memory()
         self.timer.start()
+
+    def change_folder(self):
+        self.parent().settings(focus_folder=True)
+        self.update_space()
 
     def update_space(self):
         usage, favorites, total = self.store.usage(), self.store.pinned_usage(), self.store.limits.total_bytes

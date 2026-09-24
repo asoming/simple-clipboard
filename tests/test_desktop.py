@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import QCoreApplication, QEvent, Qt, QTimer
 if sys.platform.startswith('linux'):
     from PyQt5.QtDBus import QDBusVariant
 from PyQt5.QtGui import QInputMethodEvent, QPalette
@@ -74,7 +74,7 @@ class DesktopTests(unittest.TestCase):
         self.panel.tray.hide()
         self.panel.hide()
         self.panel.deleteLater()
-        app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
         self.store.close()
         self.db_dir.cleanup()
 
@@ -197,6 +197,57 @@ class DesktopTests(unittest.TestCase):
         self.backend.paste(Target(0x7FFFFFFF))
         self.assertTrue(wait_until(lambda: len(failure) == 1))
         self.assertIn("手动粘贴", failure[0][0])
+        self.assertIn("焦点未回到", failure[0][0])
+
+    def test_modifier_release_after_old_timeout_pastes_into_verified_editor(self):
+        self.monitor.copy('delayed release 中文')
+        self.panel.hide()
+        window = self.peer_call('focus')['window']
+        failed = QSignalSpy(self.backend.paste_failed)
+        control = self.backend.code('Control_L')
+        self.backend.xtst.XTestFakeKeyEvent(self.backend.display, control, True, 0)
+        self.backend.lib.XSync(self.backend.display, False)
+        try:
+            self.assertTrue(self.backend.modifiers_pressed())
+            self.backend.paste(Target(window))
+            QTest.qWait(900)
+            self.assertTrue(self.backend.paste_timer.isActive())
+            self.assertEqual(self.peer_call('read')['text'], '')
+        finally:
+            self.backend.xtst.XTestFakeKeyEvent(self.backend.display, control, False, 0)
+            self.backend.lib.XFlush(self.backend.display)
+        self.assertTrue(wait_until(lambda: not self.backend.paste_timer.isActive()))
+        self.pasted_text('delayed release 中文')
+        self.assertEqual(len(failed), 0)
+
+    def test_held_modifier_timeout_is_explicit_and_does_not_paste(self):
+        self.monitor.copy('must remain unpasted')
+        self.panel.hide()
+        window = self.peer_call('focus')['window']
+        failed = QSignalSpy(self.backend.paste_failed)
+        control = self.backend.code('Control_L')
+        self.backend.xtst.XTestFakeKeyEvent(self.backend.display, control, True, 0)
+        self.backend.lib.XSync(self.backend.display, False)
+        try:
+            self.backend.paste(Target(window))
+            self.assertTrue(wait_until(lambda: len(failed) == 1))
+        finally:
+            self.backend.xtst.XTestFakeKeyEvent(self.backend.display, control, False, 0)
+            self.backend.lib.XFlush(self.backend.display)
+        self.assertIn('未松开', failed[0][0])
+        self.assertEqual(self.peer_call('read')['text'], '')
+        self.assertIsNone(self.backend.pending_target)
+
+    def test_missing_target_cancels_previous_pending_paste(self):
+        self.monitor.copy('cancelled paste')
+        self.panel.hide()
+        window = self.peer_call('focus')['window']
+        self.backend.paste(Target(window))
+        self.backend.paste(None)
+        self.backend._finish_paste()
+        self.assertFalse(self.backend.paste_timer.isActive())
+        self.assertIsNone(self.backend.pending_target)
+        self.assertEqual(self.peer_call('read')['text'], '')
 
     def test_global_hotkey_and_conflict_keeps_original(self):
         self.panel.hide()
@@ -215,6 +266,24 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.backend.keycode, self.backend.code("v"))
         finally:
             blocker.close()
+
+    def test_hotkey_returns_visible_background_panel_to_current_editor(self):
+        self.store.add('visible panel target 中文')
+        self.panel.refresh()
+        window = self.peer_call('focus')['window']
+        self.assertTrue(self.panel.isVisible())
+        self.assertFalse(self.backend.belongs_to(self.backend.focus(), int(self.panel.winId())))
+        for key in ('Control_L', 'Alt_L', 'v'):
+            self.backend.xtst.XTestFakeKeyEvent(self.backend.display, self.backend.code(key), True, 0)
+        for key in ('v', 'Alt_L', 'Control_L'):
+            self.backend.xtst.XTestFakeKeyEvent(self.backend.display, self.backend.code(key), False, 0)
+        self.backend.lib.XFlush(self.backend.display)
+        self.assertTrue(wait_until(lambda: self.panel.isVisible() and self.panel.target is not None
+                                   and self.panel.target.window == window
+                                   and self.backend.belongs_to(self.backend.focus(), int(self.panel.winId()))))
+        QTest.keyClick(self.panel.search, Qt.Key_Return)
+        self.assertTrue(wait_until(lambda: not self.backend.paste_timer.isActive()))
+        self.pasted_text('visible panel target 中文')
 
     def test_fresh_process_does_not_harvest_existing_clipboard(self):
         self.peer_call("copy", text="already on clipboard before launch")

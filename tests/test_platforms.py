@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import QApplication
 from clipboard_app.instance import InstanceLock
 from clipboard_app.migration import import_history
 from clipboard_app.paths import default_data_dir, instance_socket
-from clipboard_app.platforms import NativeBackend, Target, parse_shortcut
+from clipboard_app.platforms import PASTE_MAX_ATTEMPTS, NativeBackend, Target, parse_shortcut
 from clipboard_app.preferences import LinuxAutostart, MacAutostart, WindowsAutostart
 from clipboard_app.store import Store
 from clipboard_app.ui import SearchEdit
@@ -69,11 +69,30 @@ class PlatformTests(unittest.TestCase):
             backend.ready, backend.modifiers = ready, modifiers
             failed = QSignalSpy(backend.paste_failed)
             backend.paste(Target(123))
-            for _ in range(25):
+            for _ in range(PASTE_MAX_ATTEMPTS):
                 backend._finish_paste()
             self.assertEqual(backend.sent, 0)
             self.assertEqual(len(failed), 1)
+            self.assertIn('未松开' if modifiers else '焦点未回到', failed[0][0])
             backend.close()
+
+    def test_delayed_focus_or_modifier_release_still_pastes_once(self):
+        for ready, modifiers in [(False, False), (True, True)]:
+            with self.subTest(ready=ready, modifiers=modifiers):
+                backend = FakeBackend()
+                backend.ready, backend.modifiers = ready, modifiers
+                failed = QSignalSpy(backend.paste_failed)
+                backend.paste(Target(123))
+                for _ in range(30):
+                    backend._finish_paste()
+                self.assertTrue(backend.paste_timer.isActive())
+                self.assertEqual(backend.sent, 0)
+                backend.ready, backend.modifiers = True, False
+                backend._finish_paste()
+                backend._finish_paste()
+                self.assertEqual(backend.sent, 1)
+                self.assertEqual(len(failed), 0)
+                backend.close()
 
     def test_permission_revoked_while_returning_to_target(self):
         backend = FakeBackend()

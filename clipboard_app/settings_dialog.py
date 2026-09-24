@@ -1,12 +1,15 @@
 """Readable settings with a scrollable form and a persistent action row."""
 
+import sqlite3
+from pathlib import Path
+
 from PyQt5.QtCore import QPointF, Qt, QTimer
 from PyQt5.QtGui import QFont, QIcon, QPainter, QPalette, QPen
 from PyQt5.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame,
-    QLabel, QLayout, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
+    QLabel, QLayout, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
     QStyle, QStyleOptionButton, QStyleOptionComboBox, QStyleOptionSpinBox,
-    QVBoxLayout, QWidget,
+    QStyleOptionFrame, QVBoxLayout, QWidget,
 )
 
 from .store import Limits
@@ -31,6 +34,10 @@ def fit_control(widget, text):
         option = QStyleOptionSpinBox()
         widget.initStyleOption(option)
         content = style.subControlRect(QStyle.CC_SpinBox, option, QStyle.SC_SpinBoxEditField, widget)
+    elif isinstance(widget, QLineEdit):
+        option = QStyleOptionFrame()
+        option.initFrom(widget)
+        content = style.subElementRect(QStyle.SE_LineEditContents, option, widget)
     else:
         option = QStyleOptionButton()
         option.initFrom(widget)
@@ -144,7 +151,26 @@ class SettingsDialog(QDialog):
         self.startup.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.startup.setMinimumHeight(max(self.startup.sizeHint().height(), self.fontMetrics().height() + 8))
         self.form.addRow('启动', self.startup)
+
+        self.folder = self.store.path.parent.resolve()
+        folder_box = QWidget()
+        folder_layout = QVBoxLayout(folder_box)
+        folder_layout.setContentsMargins(0, 0, 0, 0)
+        folder_layout.setSpacing(6)
+        self.folder_path = QLineEdit(str(self.folder))
+        self.folder_path.setReadOnly(True)
+        self.folder_path.setAccessibleName('历史保存文件夹')
+        self.folder_path.setToolTip(str(self.folder))
+        self.folder_path.setCursorPosition(0)
+        folder_layout.addWidget(self.folder_path)
+        self.folder_button = QPushButton('选择文件夹…')
+        self.folder_button.clicked.connect(self.choose_folder)
+        folder_layout.addWidget(self.folder_button)
+        self.form.addRow('保存文件夹', folder_box)
         body_layout.addLayout(self.form)
+
+        self.folder_note = self.note('更换文件夹后，保存会复制现有历史并重启；原目录保留备份，不覆盖目标目录已有的历史。',
+                                     'folderExplanation', body_layout)
 
         self.usage = self.note(
             f'当前内容 {self.store.usage() / 1048576:.2f} MiB · 数据库 {self.store.disk_usage() / 1048576:.2f} MiB',
@@ -179,7 +205,8 @@ class SettingsDialog(QDialog):
             fit_control(combo, [combo.itemText(i) for i in range(combo.count())])
         for field in self.fields:
             fit_control(field, [field.text(), field.specialValueText(), str(field.maximum())])
-        for button in (self.shortcut_button, *self.buttons.buttons()):
+        fit_control(self.folder_path, '历史保存文件夹')
+        for button in (self.shortcut_button, self.folder_button, *self.buttons.buttons()):
             fit_control(button, button.text())
         for button in self.buttons.buttons():
             button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
@@ -192,7 +219,10 @@ class SettingsDialog(QDialog):
         label = QLabel(text)
         label.setObjectName(name)
         label.setWordWrap(True)
-        label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        policy = label.sizePolicy()
+        policy.setVerticalPolicy(QSizePolicy.Minimum)
+        policy.setHeightForWidth(True)
+        label.setSizePolicy(policy)
         layout.addWidget(label)
         return label
 
@@ -207,12 +237,28 @@ class SettingsDialog(QDialog):
         fit_control(self.shortcut_button, self.shortcut_button.text())
         self.fit_width()
 
+    def choose_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, '选择历史保存文件夹', str(self.folder))
+        if folder:
+            self.folder = Path(folder).resolve()
+            self.folder_path.setText(str(self.folder))
+            self.folder_path.setToolTip(str(self.folder))
+            self.folder_path.setCursorPosition(0)
+            changed = self.folder != self.store.path.parent.resolve()
+            self.buttons.button(QDialogButtonBox.Save).setText('保存并重启' if changed else '保存')
+            fit_control(self.buttons.button(QDialogButtonBox.Save), self.buttons.button(QDialogButtonBox.Save).text())
+            self.fit_width()
+
     def show_error(self, message):
         self.error.setText(message)
         self.error.show()
         QTimer.singleShot(0, lambda: self.scroll.ensureWidgetVisible(self.error))
 
     def save(self):
+        moving = self.folder != self.store.path.parent.resolve()
+        if moving and self.panel.relocate_history is None:
+            self.show_error('当前运行模式无法更换数据目录，请正常启动应用后重试。')
+            return
         count, total, item = (field.value() for field in self.fields)
         try:
             limits = Limits(self.retention.currentData(), count, total * 1048576, item * 1048576)
@@ -232,5 +278,11 @@ class SettingsDialog(QDialog):
         except (OSError, ValueError):
             self.show_error('保存规则和外观已更新，但无法修改自启动。请检查目录权限，或取消勾选自启动后重试。')
             return
+        if moving:
+            try:
+                self.panel.relocate_history(self.folder)
+            except (OSError, ValueError, sqlite3.Error) as error:
+                self.show_error(f'其他设置已保存，文件夹操作未完成：{error}')
+                return
         self.accept()
-        self.panel.show_notice('设置已保存。')
+        self.panel.show_notice('历史已复制，正在重启…' if moving else '设置已保存。')

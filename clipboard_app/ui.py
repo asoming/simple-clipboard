@@ -243,11 +243,12 @@ class HistoryDelegate(QStyledItemDelegate):
 class Panel(QWidget):
     import_requested = pyqtSignal(str)
 
-    def __init__(self, store: Store, monitor: Monitor, backend=None):
+    def __init__(self, store: Store, monitor: Monitor, backend=None, relocate_history=None):
         super().__init__()
         self.store = store
         self.monitor = monitor
         self.backend = backend
+        self.relocate_history = relocate_history
         self.target = None
         self.clips = []
         self.favorites_only = False
@@ -629,9 +630,14 @@ class Panel(QWidget):
             self.refresh()
 
     def open_panel(self):
-        if not self.isVisible() and self.backend:
+        if self.backend:
             target = self.backend.capture_target()
-            self.target = target if target and target.window != self.backend.window_id(self) else None
+            own_windows = {self.backend.window_id(window) for window in QApplication.topLevelWidgets()}
+            if target and target.window in own_windows:
+                if not self.isVisible():
+                    self.target = None
+            else:
+                self.target = target
         self.store.prune()
         self.search.blockSignals(True)
         self.search.clear()
@@ -655,7 +661,10 @@ class Panel(QWidget):
             self.backend.activate(Target(self.backend.window_id(self)))
 
     def toggle(self):
-        if self.isVisible():
+        active = self.isActiveWindow()
+        if self.backend:
+            active = self.backend.belongs_to(self.backend.focus(), self.backend.window_id(self))
+        if self.isVisible() and active:
             self.dismiss()
         else:
             self.open_panel()
@@ -833,9 +842,11 @@ class Panel(QWidget):
             self.update_state()
             self.show_notice(f"快捷键已设为 {value}")
 
-    def settings(self):
+    def settings(self, *, focus_folder=False):
         from .settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
+        if focus_folder:
+            QTimer.singleShot(0, lambda: dialog.scroll.ensureWidgetVisible(dialog.folder_path))
         dialog.exec_()
         dialog.deleteLater()
 

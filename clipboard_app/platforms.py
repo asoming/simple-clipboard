@@ -7,6 +7,16 @@ from dataclasses import dataclass
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 
+PASTE_CHECK_INTERVAL_MS = 30
+PASTE_MAX_ATTEMPTS = 50
+
+
+def paste_timeout_message(target_ready: bool) -> str:
+    if target_ready:
+        return '内容已复制，但仍有 Ctrl、Alt、Shift 或系统键未松开。请松开按键后重试，或手动粘贴。'
+    return '内容已复制，但焦点未回到目标窗口。请先点目标输入框，再用全局快捷键打开后粘贴；也可手动粘贴。'
+
+
 @dataclass(frozen=True)
 class Target:
     window: int
@@ -29,7 +39,7 @@ class NativeBackend(QObject):
         self.pending_target = None
         self.paste_attempts = 0
         self.paste_timer = QTimer(self)
-        self.paste_timer.setInterval(30)
+        self.paste_timer.setInterval(PASTE_CHECK_INTERVAL_MS)
         self.paste_timer.timeout.connect(self._finish_paste)
 
     def window_id(self, panel):
@@ -57,9 +67,12 @@ class NativeBackend(QObject):
         return self.belongs_to(self.focus(), target.window)
 
     def _finish_paste(self):
-        self.paste_attempts += 1
         target = self.pending_target
-        if target and self.target_ready(target) and not self.modifiers_pressed():
+        if target is None:
+            return
+        self.paste_attempts += 1
+        target_ready = self.target_ready(target)
+        if target_ready and not self.modifiers_pressed():
             self.paste_timer.stop()
             self.pending_target = None
             message = self.permission_message()
@@ -69,10 +82,10 @@ class NativeBackend(QObject):
                 self.paste_requested.emit()
             else:
                 self.paste_failed.emit('内容已复制，但系统未接受自动粘贴。目标可能以更高权限运行，请手动粘贴。')
-        elif self.paste_attempts >= 25:
+        elif self.paste_attempts >= PASTE_MAX_ATTEMPTS:
             self.paste_timer.stop()
             self.pending_target = None
-            self.paste_failed.emit('内容已复制，但未能返回原输入窗口。请手动粘贴。')
+            self.paste_failed.emit(paste_timeout_message(target_ready))
 
     def close(self):
         self.paste_timer.stop()
