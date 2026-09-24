@@ -84,7 +84,7 @@ Linux 已识别终端使用 Ctrl+Shift+V；Windows 使用 Ctrl+V，Mac 使用 Cm
 
 原目录保留备份，不自动删除；目标目录已有历史数据库或事务文件时会拒绝覆盖。迁移失败会尝试恢复原配置，并显示具体原因。所选目录或数据盘不可用时会明确报错，不会静默创建空历史。Linux/macOS 的迁移目标需支持原子硬链接，Windows 使用同目录原子重命名；不支持的文件系统会安全失败。
 
-目录偏好单独保存在 Linux 的 `$XDG_CONFIG_HOME/simple-clipboard/location.json`（默认 `~/.config`）、Windows 的 `%APPDATA%/SimpleClipboard/location.json`、macOS 的 `~/Library/Application Support/SimpleClipboard/location.json`。显式 `--data-dir` 仍可指定独立数据目录；受管理的登录启动与迁移重启增加 `--require-history`，仅打开已有历史。
+目录偏好单独保存在 Linux 的 `$XDG_CONFIG_HOME/simple-clipboard/location.json`（默认 `~/.config`）、Windows 的 `%APPDATA%/SimpleClipboard/location.json`、macOS 的 `~/Library/Preferences/io.github.asoming.simpleclipboard/location.json`。配置与默认历史目录分开，清理旧目录备份不会删除新位置的配置。显式 `--data-dir` 仍可指定独立数据目录；受管理的登录启动与迁移重启增加 `--require-history`，仅打开已有历史。
 
 ### 容量与保留规则
 

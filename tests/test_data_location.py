@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -64,7 +65,7 @@ class DataLocationTests(unittest.TestCase):
     def test_platform_config_paths_are_separate_from_history_and_test_home(self):
         for platform, expected in (
             ("win32", "AppData/Roaming/SimpleClipboard/location.json"),
-            ("darwin", "Library/Application Support/SimpleClipboard/location.json"),
+            ("darwin", "Library/Preferences/io.github.asoming.simpleclipboard/location.json"),
             ("linux", ".config/simple-clipboard/location.json"),
         ):
             self.assertEqual(location_config_path(platform, {}, self.root), self.root / expected)
@@ -146,6 +147,27 @@ class DataLocationTests(unittest.TestCase):
         self.assertEqual(self.default_directory(), legacy)
         self.write_preference()
         self.assertEqual(self.default_directory(), self.store.path.parent)
+
+    def test_mac_location_survives_removing_old_default_history_directory(self):
+        home = self.root / "mac-home"
+        arguments = dict(environment={}, home=home, source_root=self.root, frozen=True)
+        source = default_data_dir("darwin", **arguments)
+        preference = location_config_path("darwin", {}, home)
+        with closing(Store(source / "history.sqlite3")) as store:
+            store.add("迁移后保留的合成历史")
+            move = prepare_move(store, self.destination, config_path=preference)
+            self.moves.append(move)
+            move.commit()
+        # Reclaim the complete old backup directory, just as a user may do after
+        # verifying the new copy. Its removal must not remove the location file.
+        shutil.rmtree(source)
+        self.assertFalse(source.exists())
+        self.assertTrue(preference.is_file())
+        selected = default_data_dir("darwin", **arguments)
+        self.assertEqual(selected, self.destination)
+        with closing(sqlite3.connect(selected / "history.sqlite3")) as copy:
+            self.assertEqual(copy.execute("SELECT text FROM clips").fetchall(), [("迁移后保留的合成历史",)])
+        self.assertFalse(source.exists())
 
     def test_missing_saved_folder_or_database_never_falls_back_to_empty_history(self):
         self.write_preference(self.destination)

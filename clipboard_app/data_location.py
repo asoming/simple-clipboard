@@ -30,7 +30,7 @@ def location_config_path(platform=None, environment=None, home=None):
     if platform == "win32":
         directory = Path(environment.get("APPDATA", home / "AppData" / "Roaming")) / "SimpleClipboard"
     elif platform == "darwin":
-        directory = home / "Library" / "Application Support" / "SimpleClipboard"
+        directory = home / "Library" / "Preferences" / "io.github.asoming.simpleclipboard"
     else:
         directory = Path(environment.get("XDG_CONFIG_HOME", home / ".config")) / "simple-clipboard"
     return directory / "location.json"
