@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
     QLayout, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
     QStyle, QStyleOptionButton, QStyleOptionComboBox, QStyleOptionSpinBox,
-    QStyleOptionFrame, QVBoxLayout, QWidget,
+    QStyleOptionFrame, QTabBar, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from .store import Limits
@@ -71,7 +71,24 @@ class SettingsSpinBox(QSpinBox):
             painter.drawLine(QPointF(center.x(), center.y() + direction), QPointF(center.x() + 3, center.y() - direction))
 
 
+class SettingsTabBar(QTabBar):
+    """Native tabs with enough room for Chinese fallback glyphs."""
+
+    def tabSizeHint(self, index):
+        size = super().tabSizeHint(index)
+        metrics = self.fontMetrics()
+        text = self.tabText(index)
+        size.setHeight(max(size.height(), metrics.height() + 16, metrics.boundingRect(text).height() + 16))
+        size.setWidth(max(size.width(), metrics.horizontalAdvance(text) + 24))
+        return size
+
+    def minimumTabSizeHint(self, index):
+        return self.tabSizeHint(index)
+
+
 class SettingsDialog(QDialog):
+    section_names = ('general', 'history', 'space')
+
     def __init__(self, panel):
         super().__init__(panel)
         self.panel = panel
@@ -83,26 +100,52 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(360, 280)
         self.setSizeGripEnabled(True)
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
+        root.setContentsMargins(18, 12, 18, 14)
         root.setSpacing(12)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName('settingsTabs')
+        self.tabs.setFont(QFont(panel.font()))
+        self.tabs.setTabBar(SettingsTabBar())
+        self.tabs.tabBar().setDrawBase(False)
+        self.tabs.setElideMode(Qt.ElideNone)
+        self.tabs.setUsesScrollButtons(True)
+        self.pages = {}
+        general_scroll, general_body = self.make_page('general')
+        history_scroll, history_body = self.make_page('history')
+        general_layout = general_body.layout()
+        history_layout = history_body.layout()
+        self.note('启动与外观', 'sectionTitle', general_layout)
+        general_form = self.make_form()
+        general_layout.addLayout(general_form)
 
-        self.scroll = QScrollArea()
-        self.scroll.setObjectName('settingsScroll')
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QFrame.NoFrame)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.body = QWidget()
-        self.body.setObjectName('settingsBody')
-        body_layout = QVBoxLayout(self.body)
-        body_layout.setContentsMargins(0, 0, 12, 0)
-        body_layout.setSpacing(14)
-        body_layout.setSizeConstraint(QLayout.SetMinimumSize)
-        self.form = QFormLayout()
-        self.form.setSpacing(12)
-        self.form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.form.setRowWrapPolicy(QFormLayout.WrapLongRows)
-        self.form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.theme = FormatComboBox()
+        self.theme.setObjectName('settingsChoice')
+        self.theme.setAccessibleName('外观')
+        for label, value in (('跟随系统', 'system'), ('浅色', 'light'), ('深色', 'dark')):
+            self.theme.addItem(label, value)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(self.store.setting('theme', 'system'))))
+        general_form.addRow('外观', self.theme)
+        self.shortcut_button = QPushButton(panel.shortcut + ' · 修改')
+        self.shortcut_button.setAccessibleName('全局快捷键')
+        self.shortcut_button.clicked.connect(self.change_shortcut)
+        general_form.addRow('唤起快捷键', self.shortcut_button)
+        self.startup = QCheckBox('登录后在后台启动')
+        try:
+            self.startup.setChecked(panel.autostart.enabled())
+        except (OSError, ValueError):
+            self.startup.setEnabled(False)
+            self.startup.setToolTip('无法读取系统自启动目录。')
+        self.startup.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.startup.setMinimumHeight(max(self.startup.sizeHint().height(), self.fontMetrics().height() + 8))
+        general_form.addRow('登录启动', self.startup)
+        self.note('全局快捷键随时唤起剪贴历史。复制、收藏和保存规则都在本机处理。',
+                  'sectionDescription', general_layout)
+        self.error = self.note('', 'notice', general_layout)
+        self.error.hide()
+        general_layout.addStretch()
 
+        self.note('保存规则', 'sectionTitle', history_layout)
+        self.form = self.make_form()
         limits = self.store.limits
         self.retention = FormatComboBox()
         self.retention.setObjectName("settingsChoice")
@@ -129,30 +172,31 @@ class SettingsDialog(QDialog):
                 field.setSpecialValueText('自动' if '单条' in name else '不限')
             field.setValue(value)
             field.setAccessibleName(name)
-            self.form.addRow(label, field)
             self.fields.append(field)
-
-        self.theme = FormatComboBox()
-        self.theme.setObjectName("settingsChoice")
-        self.theme.setAccessibleName('外观')
-        for label, value in (('跟随系统', 'system'), ('浅色', 'light'), ('深色', 'dark')):
-            self.theme.addItem(label, value)
-        self.theme.setCurrentIndex(max(0, self.theme.findData(self.store.setting('theme', 'system'))))
-        self.form.addRow('外观', self.theme)
-        self.shortcut_button = QPushButton(panel.shortcut + ' · 修改')
-        self.shortcut_button.setAccessibleName('全局快捷键')
-        self.shortcut_button.clicked.connect(self.change_shortcut)
-        self.form.addRow('快捷键', self.shortcut_button)
-        self.startup = QCheckBox('登录后在后台启动')
-        try:
-            self.startup.setChecked(panel.autostart.enabled())
-        except (OSError, ValueError):
-            self.startup.setEnabled(False)
-            self.startup.setToolTip('无法读取系统自启动目录。')
-        self.startup.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.startup.setMinimumHeight(max(self.startup.sizeHint().height(), self.fontMetrics().height() + 8))
-        self.form.addRow('启动', self.startup)
-
+        self.form.addRow('内容容量（MiB）', self.fields[1])
+        history_layout.addLayout(self.form)
+        self.note('收藏不会自动清理。无限期仍受容量限制，超限时清理最旧的普通记录。',
+                  'sectionDescription', history_layout)
+        self.advanced_toggle = QPushButton('更多限制')
+        self.advanced_toggle.setObjectName('advancedToggle')
+        self.advanced_toggle.setCheckable(True)
+        history_layout.addWidget(self.advanced_toggle, 0, Qt.AlignLeft)
+        self.advanced_fields = QWidget()
+        advanced_layout = QVBoxLayout(self.advanced_fields)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_form = self.make_form()
+        advanced_form.addRow('普通历史条数', self.fields[0])
+        advanced_form.addRow('单条上限（MiB）', self.fields[2])
+        advanced_layout.addLayout(advanced_form)
+        self.note('条数填 0 表示不限；单条填 0 表示自动，受内容总容量约束。',
+                  'sectionDescription', advanced_layout)
+        history_layout.addWidget(self.advanced_fields)
+        advanced_visible = bool(limits.count or limits.item_bytes)
+        self.advanced_fields.setVisible(advanced_visible)
+        self.advanced_toggle.setChecked(advanced_visible)
+        self.advanced_toggle.setText('收起更多限制' if advanced_visible else '更多限制')
+        self.advanced_toggle.toggled.connect(self.set_advanced_visible)
+        self.note('保存位置', 'sectionTitle', history_layout)
         self.folder = self.store.path.parent.resolve()
         folder_box = QWidget()
         folder_layout = QVBoxLayout(folder_box)
@@ -165,26 +209,28 @@ class SettingsDialog(QDialog):
         self.folder_path.setCursorPosition(0)
         folder_layout.addWidget(self.folder_path)
         self.folder_button = QPushButton('选择文件夹…')
+        self.folder_button.setObjectName('quiet')
         self.folder_button.clicked.connect(self.choose_folder)
-        folder_layout.addWidget(self.folder_button)
-        self.form.addRow('保存文件夹', folder_box)
-        body_layout.addLayout(self.form)
+        folder_layout.addWidget(self.folder_button, 0, Qt.AlignLeft)
+        history_layout.addWidget(folder_box)
 
         self.folder_note = self.note('更换文件夹后，保存会复制现有历史并重启；原目录保留备份，不覆盖目标目录已有的历史。',
-                                     'folderExplanation', body_layout)
+                                     'folderExplanation', history_layout)
 
         self.usage = self.note(
             f'当前内容 {self.store.usage() / 1048576:.2f} MiB · 数据库 {self.store.disk_usage() / 1048576:.2f} MiB',
-            'settingsUsage', body_layout)
-        self.note('无限期仍受容量限制，收藏不会自动清理。单条填 0 表示自动，条数填 0 表示不限；自动上限为内容总容量。数据库索引额外占用空间。',
-                  'settingsExplanation', body_layout)
+            'sectionDescription', history_layout)
         self.warning = self.note('缩短期限或减小容量后，超出限制的普通记录会被清理，删除无法恢复。',
-                                 'settingsWarning', body_layout)
-        self.error = self.note('', 'notice', body_layout)
-        self.error.hide()
-        body_layout.addStretch()
-        self.scroll.setWidget(self.body)
-        root.addWidget(self.scroll, 1)
+                                 'settingsWarning', history_layout)
+        history_layout.addStretch()
+        self.tabs.addTab(general_scroll, '常规')
+        self.tabs.addTab(history_scroll, '历史与存储')
+        from .storage_view import StoragePage
+        self.space_page = StoragePage(self.store, self, open_folder=self.focus_folder)
+        self.pages['space'] = (self.space_page.scroll, self.space_page.body)
+        self.tabs.addTab(self.space_page, '空间与内存')
+        self.tabs.currentChanged.connect(self.section_changed)
+        root.addWidget(self.tabs, 1)
 
         footer = QWidget()
         footer.setObjectName('settingsFooter')
@@ -199,6 +245,7 @@ class SettingsDialog(QDialog):
             button.setIcon(QIcon())
         self.buttons.accepted.connect(self.save)
         self.buttons.rejected.connect(self.reject)
+        self.finished.connect(lambda: self.space_page.set_sampling(False))
         footer_layout.addWidget(self.buttons)
         root.addWidget(footer)
         self.ensurePolished()
@@ -207,13 +254,69 @@ class SettingsDialog(QDialog):
         for field in self.fields:
             fit_control(field, [field.text(), field.specialValueText(), str(field.maximum())])
         fit_control(self.folder_path, '历史保存文件夹')
-        for button in (self.shortcut_button, self.folder_button, *self.buttons.buttons()):
+        for button in (self.shortcut_button, self.folder_button, self.advanced_toggle, *self.buttons.buttons()):
             fit_control(button, button.text())
-        for button in self.buttons.buttons():
+        for button in (self.folder_button, self.advanced_toggle, *self.buttons.buttons()):
             button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.fit_width()
         screen = self.screen().availableGeometry()
-        self.resize(min(520, max(360, screen.width() - 80)), min(570, max(280, screen.height() - 100)))
+        self.resize(min(600, max(360, screen.width() - 80)), min(600, max(280, screen.height() - 100)))
+
+    def make_page(self, name):
+        scroll = QScrollArea()
+        scroll.setObjectName('settingsScroll')
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        body = QWidget()
+        body.setObjectName('settingsBody')
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(2, 8, 12, 8)
+        layout.setSpacing(12)
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
+        scroll.setWidget(body)
+        self.pages[name] = (scroll, body)
+        return scroll, body
+
+    @staticmethod
+    def make_form():
+        form = QFormLayout()
+        form.setSpacing(12)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        return form
+
+    @property
+    def section(self):
+        return self.section_names[self.tabs.currentIndex()]
+
+    @property
+    def scroll(self):
+        return self.pages[self.section][0]
+
+    @property
+    def body(self):
+        return self.pages[self.section][1]
+
+    def show_section(self, name):
+        self.tabs.setCurrentIndex(self.section_names.index(name))
+
+    def section_changed(self, index):
+        self.space_page.set_sampling(self.section == 'space' and self.isVisible())
+        self.fit_width()
+
+    def focus_folder(self):
+        self.show_section('history')
+        self.folder_button.setFocus()
+        QTimer.singleShot(0, lambda: self.pages['history'][0].ensureWidgetVisible(self.folder_path))
+
+    def set_advanced_visible(self, visible):
+        self.advanced_fields.setVisible(visible)
+        self.advanced_toggle.setText('收起更多限制' if visible else '更多限制')
+        fit_control(self.advanced_toggle, self.advanced_toggle.text())
+        self.advanced_toggle.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.fit_width()
 
     @staticmethod
     def note(text, name, layout):
@@ -223,9 +326,10 @@ class SettingsDialog(QDialog):
         return label
 
     def fit_width(self):
-        self.body.layout().activate()
+        for scroll, body in self.pages.values():
+            body.layout().activate()
         self.layout().activate()
-        self.setMinimumWidth(max(360, self.body.minimumSizeHint().width() + 60))
+        self.setMinimumWidth(max(360, max(body.minimumSizeHint().width() for scroll, body in self.pages.values()) + 66))
 
     def change_shortcut(self):
         self.panel.change_shortcut()
@@ -246,9 +350,12 @@ class SettingsDialog(QDialog):
             self.fit_width()
 
     def show_error(self, message):
+        layout = self.body.layout()
+        layout.insertWidget(layout.count() - 1, self.error)
         self.error.setText(message)
         self.error.show()
-        QTimer.singleShot(0, lambda: self.scroll.ensureWidgetVisible(self.error))
+        scroll = self.scroll
+        QTimer.singleShot(0, lambda: scroll.ensureWidgetVisible(self.error))
 
     def save(self):
         moving = self.folder != self.store.path.parent.resolve()

@@ -52,6 +52,8 @@ class SettingsLayoutTests(unittest.TestCase):
 
     def check_controls(self, dialog):
         for combo in (dialog.retention, dialog.theme):
+            if not combo.isVisible():
+                continue
             original = combo.currentIndex()
             for index in range(combo.count()):
                 combo.setCurrentIndex(index)
@@ -64,6 +66,8 @@ class SettingsLayoutTests(unittest.TestCase):
             combo.setCurrentIndex(original)
 
         for spin in dialog.fields:
+            if not spin.isVisible():
+                continue
             original = spin.value()
             for value in (spin.minimum(), original, spin.maximum()):
                 spin.setValue(value)
@@ -82,6 +86,8 @@ class SettingsLayoutTests(unittest.TestCase):
             spin.setValue(original)
 
         for button in dialog.findChildren(QPushButton):
+            if not button.isVisible():
+                continue
             option = QStyleOptionButton()
             option.initFrom(button)
             option.text = button.text()
@@ -102,7 +108,8 @@ class SettingsLayoutTests(unittest.TestCase):
             self.assertTrue(dialog.rect().contains(rect))
 
         scrollbar = dialog.scroll.verticalScrollBar()
-        self.assertGreater(scrollbar.maximum(), 0, "Small dialogs must scroll instead of squeezing rows")
+        if dialog.section != 'general':
+            self.assertGreater(scrollbar.maximum(), 0, "Long sections must scroll instead of squeezing rows")
         labels = [label for label in dialog.body.findChildren(QLabel)
                   if label.isVisible() and label.text() and label.wordWrap()]
         self.assertTrue(labels, "Settings explanations should be inside the scrolling body")
@@ -111,6 +118,9 @@ class SettingsLayoutTests(unittest.TestCase):
             self.assertGreaterEqual(label.height(), required, label.text())
         last_label = max(labels, key=lambda label: label.mapTo(dialog.body, QPoint()).y() + label.height())
         scrollbar.setValue(scrollbar.maximum())
+        # Target the final line even when the explanation exceeds the viewport.
+        end = last_label.mapTo(dialog.body, last_label.rect().bottomLeft())
+        dialog.scroll.ensureVisible(end.x(), end.y(), 0, last_label.fontMetrics().height())
         app.processEvents()
         bottom = last_label.mapTo(dialog.scroll.viewport(), last_label.rect().bottomLeft())
         self.assertLessEqual(bottom.y(), dialog.scroll.viewport().rect().bottom())
@@ -149,13 +159,24 @@ class SettingsLayoutTests(unittest.TestCase):
                             dialog.show()
                             app.processEvents()
                             self.assertEqual(dialog.font(), panel.font())
-                            self.check_controls(dialog)
-                            self.check_scroll_and_footer(dialog)
-                            dialog.show_error("测试错误：设置无法保存，请检查后重试。" * 3)
-                            app.processEvents()
-                            self.assertTrue(dialog.error.isVisible())
-                            self.check_scroll_and_footer(dialog)
+                            for section in dialog.section_names:
+                                with self.subTest(section=section):
+                                    dialog.show_section(section)
+                                    if section == 'history':
+                                        dialog.advanced_toggle.setChecked(True)
+                                    app.processEvents()
+                                    self.check_controls(dialog)
+                                    self.check_scroll_and_footer(dialog)
+                                    tabbar = dialog.tabs.tabBar()
+                                    tab_text = tabbar.tabText(tabbar.currentIndex())
+                                    tab_area = tabbar.tabRect(tabbar.currentIndex())
+                                    self.assert_text_fits(tabbar, tab_area, tab_text)
+                                    dialog.show_error("测试错误：设置无法保存，请检查后重试。" * 3)
+                                    app.processEvents()
+                                    self.assertTrue(dialog.error.isVisible())
+                                    self.check_scroll_and_footer(dialog)
                             if points == 20:
+                                dialog.show_section('general')
                                 dialog.resize(dialog.minimumWidth(), 400)
                                 app.processEvents()
                                 self.check_controls(dialog)

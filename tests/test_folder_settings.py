@@ -153,6 +153,7 @@ class FolderSettingsTests(unittest.TestCase):
     def test_keyboard_capacity_change_persists_when_settings_reopen(self):
         with self.fixture() as (panel, store, root):
             dialog = SettingsDialog(panel)
+            dialog.show_section('history')
             dialog.show()
             capacity = dialog.fields[1]
             self.assertEqual(capacity.value(), 500)
@@ -189,22 +190,31 @@ class FolderSettingsTests(unittest.TestCase):
 
     def check_dialog_layout(self, dialog):
         for combo in dialog.findChildren(QComboBox):
+            if not combo.isVisible():
+                continue
             option = QStyleOptionComboBox()
             combo.initStyleOption(option)
             area = combo.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo)
             self.assert_control_text_fits(combo, area, combo.currentText())
         for spin in dialog.findChildren(QSpinBox):
+            if not spin.isVisible():
+                continue
             option = QStyleOptionSpinBox()
             spin.initStyleOption(option)
             area = spin.style().subControlRect(QStyle.CC_SpinBox, option, QStyle.SC_SpinBoxEditField, spin)
             self.assert_control_text_fits(spin, area, spin.text())
         for editor in dialog.findChildren(QLineEdit):
+            if not editor.isVisible():
+                continue
             option = QStyleOptionFrame()
             option.initFrom(editor)
             area = editor.style().subElementRect(QStyle.SE_LineEditContents, option, editor)
             # Long folder names scroll within the read-only field; the tooltip keeps the full path.
-            self.assert_control_text_fits(editor, area, editor.text(), check_width=editor is not dialog.folder_path)
+            is_folder = editor.isReadOnly() and editor.accessibleName() == '历史保存文件夹'
+            self.assert_control_text_fits(editor, area, editor.text(), check_width=not is_folder)
         for button in dialog.findChildren(QPushButton):
+            if not button.isVisible():
+                continue
             option = QStyleOptionButton()
             option.initFrom(button)
             option.text = button.text()
@@ -224,8 +234,11 @@ class FolderSettingsTests(unittest.TestCase):
             self.assertGreaterEqual(label.height(), label.heightForWidth(label.width()), label.text())
         last = max(labels, key=lambda label: label.mapTo(dialog.body, QPoint()).y() + label.height())
         bar = dialog.scroll.verticalScrollBar()
-        self.assertGreater(bar.maximum(), 0)
+        if not isinstance(dialog, SettingsDialog) or dialog.section != 'general':
+            self.assertGreater(bar.maximum(), 0)
         bar.setValue(bar.maximum())
+        end = last.mapTo(dialog.body, last.rect().bottomLeft())
+        dialog.scroll.ensureVisible(end.x(), end.y(), 0, last.fontMetrics().height())
         app.processEvents()
         bottom = last.mapTo(dialog.scroll.viewport(), last.rect().bottomLeft()).y()
         self.assertGreaterEqual(bottom, 0)
@@ -248,7 +261,12 @@ class FolderSettingsTests(unittest.TestCase):
                             destination.mkdir()
                             self.choose(settings, destination)
                             storage = StorageDialog(store, panel)
-                            for dialog in (settings, storage):
+                            views = [(settings, section) for section in settings.section_names] + [(storage, None)]
+                            for dialog, section in views:
+                                if section is not None:
+                                    dialog.show_section(section)
+                                    if section == 'history':
+                                        dialog.advanced_toggle.setChecked(True)
                                 dialog.resize(440, 400)
                                 dialog.show()
                                 app.processEvents()
@@ -264,6 +282,70 @@ class FolderSettingsTests(unittest.TestCase):
         finally:
             app.setFont(original_font)
 
+    def test_sections_preserve_pending_fields_and_folder_focus(self):
+        with self.fixture() as (panel, store, root):
+            dialog = SettingsDialog(panel)
+            dialog.show()
+            self.assertEqual(dialog.section, 'general')
+            dialog.theme.setCurrentIndex(dialog.theme.findData('dark'))
+            dialog.show_section('history')
+            self.assertFalse(dialog.advanced_fields.isVisible())
+            dialog.advanced_toggle.click()
+            self.assertTrue(dialog.advanced_fields.isVisible())
+            dialog.retention.setCurrentIndex(dialog.retention.findData(365))
+            for field, value in zip(dialog.fields, (120, 750, 50)):
+                field.setValue(value)
+            dialog.show_section('space')
+            self.assertEqual(store.limits.total_bytes, 500 * 1048576)
+            dialog.focus_folder()
+            app.processEvents()
+            self.assertEqual(dialog.section, 'history')
+            self.assertTrue(dialog.folder_path.isVisible())
+            self.assertEqual([field.value() for field in dialog.fields], [120, 750, 50])
+            dialog.save()
+            self.assertEqual(store.limits.days, 365)
+            self.assertEqual(store.limits.count, 120)
+            self.assertEqual(store.limits.total_bytes, 750 * 1048576)
+            self.assertEqual(store.limits.item_bytes, 50 * 1048576)
+            self.assertEqual(store.setting('theme'), 'dark')
+
+    def test_memory_sampling_starts_on_visible_space_page_and_stops_on_exit(self):
+        with self.fixture() as (panel, store, root), patch(
+                'clipboard_app.storage_view.resident_bytes', return_value=80 * 1048576) as sample:
+            dialog = SettingsDialog(panel)
+            page = dialog.space_page
+            page.timer.setInterval(5)
+            self.assertFalse(page.timer.isActive())
+            sample.assert_not_called()
+            dialog.show()
+            dialog.show_section('history')
+            app.processEvents()
+            sample.assert_not_called()
+            dialog.show_section('space')
+            app.processEvents()
+            self.assertTrue(page.timer.isActive())
+            count = sample.call_count
+            QTest.qWait(20)
+            self.assertGreater(sample.call_count, count)
+            dialog.show_section('general')
+            self.assertFalse(page.timer.isActive())
+            count = sample.call_count
+            QTest.qWait(20)
+            self.assertEqual(sample.call_count, count)
+            dialog.show_section('space')
+            dialog.reject()
+            self.assertFalse(page.timer.isActive())
+            count = sample.call_count
+            QTest.qWait(20)
+            self.assertEqual(sample.call_count, count)
+            legacy = StorageDialog(store, panel)
+            self.assertFalse(legacy.timer.isActive())
+            legacy.show()
+            app.processEvents()
+            self.assertTrue(legacy.timer.isActive())
+            legacy.hide()
+            self.assertFalse(legacy.timer.isActive())
+
     def test_storage_wrapping_reflows_with_fallback_font_and_dynamic_results(self):
         original_font = QFont(app.font())
         try:
@@ -275,7 +357,7 @@ class FolderSettingsTests(unittest.TestCase):
                         dialog.resize(width, 400)
                         dialog.show()
                         app.processEvents()
-                        self.assertGreaterEqual(dialog.legend.font().pointSizeF(), 24)
+                        self.assertGreaterEqual(dialog.legend.font().pointSizeF(), 20)
                         self.check_dialog_layout(dialog)
                         dialog.result.setText('测试操作结果：当前记录保留，请检查上方读数。' * 3)
                         app.processEvents()
@@ -300,6 +382,7 @@ class FolderSettingsTests(unittest.TestCase):
                         self.assertGreaterEqual(notice.font().pointSizeF(), 20)
                         self.assertGreaterEqual(notice.height(), notice.heightForWidth(notice.width()))
                         self.assertTrue(panel.rect().contains(notice.geometry()))
-                        self.assertLess(notice.geometry().bottom(), panel.copy_button.geometry().top())
+                        copy_top = panel.copy_button.mapTo(panel, QPoint()).y()
+                        self.assertLess(notice.geometry().bottom(), copy_top)
         finally:
             app.setFont(original_font)

@@ -20,6 +20,6 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='SimpleClipboard',
 collection = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SimpleClipboard')
 if sys.platform == 'darwin':
     app = BUNDLE(collection, name='SimpleClipboard.app', bundle_identifier='io.github.asoming.simpleclipboard',
-                 info_plist={'CFBundleShortVersionString':'0.5.0', 'CFBundleVersion':'0.5.0',
+                 info_plist={'CFBundleShortVersionString':'0.6.0', 'CFBundleVersion':'0.6.0',
                              'LSMinimumSystemVersion':'14.0', 'LSUIElement':True,
                              'NSHighResolutionCapable':True})

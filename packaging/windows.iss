@@ -1,7 +1,7 @@
 [Setup]
 AppId={{368FC64E-2930-47FC-A68D-189369201651}
 AppName=Simple Clipboard
-AppVersion=0.5.0
+AppVersion=0.6.0
 AppPublisher=asoming
 AppPublisherURL=https://github.com/asoming/simple-clipboard
 DefaultDirName={localappdata}\Programs\SimpleClipboard
@@ -12,7 +12,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.22000
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=SimpleClipboard-0.5.0-preview-windows-x64-setup
+OutputBaseFilename=SimpleClipboard-0.6.0-preview-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes

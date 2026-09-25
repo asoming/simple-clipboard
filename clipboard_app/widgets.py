@@ -16,6 +16,9 @@ class WrappedLabel(QLabel):
         self.setSizePolicy(policy)
 
     def fit_height(self):
+        # QLabel includes its minimum height in heightForWidth. Clear the old
+        # constraint so a wider label can shrink back to fewer wrapped lines.
+        self.setMinimumHeight(0)
         height = max(0, self.heightForWidth(self.width())) if self.text() else 0
         if height != self.minimumHeight():
             self.setMinimumHeight(height)
