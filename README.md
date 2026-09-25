@@ -1,27 +1,27 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.6.0 界面改版验证中 · GPL-3.0
+本地桌面剪贴板管理器 · 0.6.0 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色主界面，使用合成示例](docs/images/raycast-main-light.png)
 
-0.6.0 按用户确认的 Raycast 方向整理界面：紧凑搜索列表、按需打开的内容预览，以及「常规／历史存储／空间与内存」分组设置。新版正在验证，实际结果见 [界面验收](docs/Raycast方向界面验收.md)。
+0.6.0 按用户确认的 Raycast 方向整理界面：紧凑搜索列表、按需打开的内容预览，以及「常规／历史存储／空间与内存」分组设置。本轮已通过三端自动化与安装包检查，实际结果见 [界面验收](docs/Raycast方向界面验收.md)。
 
 已交付的 0.5.0 支持更换历史保存文件夹，并修复后台面板沿用旧粘贴目标的问题。自动粘贴失败会区分焦点未返回与修饰键未松开；Codex 的用户场景仍需实际试用。见 [目录与粘贴验收](docs/保存目录与粘贴修复验收.md)。
 
 ## 安装与启动
 
-0.6.0 尚未发布；当前可从 [Releases 下载已交付的 0.5.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.5.0-preview.1)：
+从 [Releases 下载 0.6.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.6.0-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/SimpleClipboard-0.5.0-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.5.0-preview.1/simple-clipboard_0.5.0-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/simple-clipboard_0.6.0-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.5.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.6.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
@@ -50,7 +50,7 @@ Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，
 
 | 操作 | 方法 |
 |---|---|
-| 原格式 / 纯文本 | 底部「粘贴格式」，同时影响「仅复制」和「粘贴」 |
+| 原格式 / 纯文本 | 底部「原格式 / 纯文本」，同时影响「仅复制」和「粘贴」 |
 | 仅复制 | Ctrl+Enter，或底部「仅复制」 |
 | 关闭面板 | Esc；不改变剪贴板 |
 | 收藏 / 取消收藏 | 点击记录右侧星标，或 Ctrl+D |
@@ -90,7 +90,7 @@ Linux 已识别终端使用 Ctrl+Shift+V；Windows 使用 Ctrl+V，Mac 使用 Cm
 
 ### 更换保存文件夹
 
-选择「保存文件夹 → 选择文件夹…」，然后「保存并重启」。应用会复制并校验当前历史、收藏、原图及设置，更新已开启的登录启动位置，再重启使用新目录。关闭的自启动保持关闭。
+选择「设置 → 历史与存储 → 保存位置 → 选择文件夹…」，然后「保存并重启」。应用会复制并校验当前历史、收藏、原图及设置，更新已开启的登录启动位置，再重启使用新目录。关闭的自启动保持关闭。
 
 原目录保留备份，不自动删除；目标目录已有历史数据库或事务文件时会拒绝覆盖。迁移失败会尝试恢复原配置，并显示具体原因。所选目录或数据盘不可用时会明确报错，不会静默创建空历史。Linux/macOS 的迁移目标需支持原子硬链接，Windows 使用同目录原子重命名；不支持的文件系统会安全失败。
 

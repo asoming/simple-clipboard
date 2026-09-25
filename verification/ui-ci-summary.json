@@ -1,44 +1,44 @@
 {
-  "commit": "d2e2e4ecdf40b8f6f3c1c13771175067fc768b9d",
-  "run": "https://github.com/asoming/simple-clipboard/actions/runs/35963609775",
+  "commit": "6e02de376101e861ae11d6e0c8bd8259bb0ad11d",
+  "run": "https://github.com/asoming/simple-clipboard/actions/runs/36111279119",
   "conclusion": "success",
   "tests": {
-    "native (macos-14, macos-arm64)": {
-      "total": 133,
-      "skipped": 25,
-      "passed": 108
-    },
     "linux-x11": {
-      "total": 133,
+      "total": 155,
       "skipped": 9,
-      "passed": 124
-    },
-    "native (macos-15-intel, macos-intel)": {
-      "total": 133,
-      "skipped": 25,
-      "passed": 108
+      "passed": 146
     },
     "native (windows-2025, windows-x64)": {
-      "total": 133,
+      "total": 155,
       "skipped": 27,
-      "passed": 106
+      "passed": 128
+    },
+    "native (macos-14, macos-arm64)": {
+      "total": 155,
+      "skipped": 25,
+      "passed": 130
+    },
+    "native (macos-15-intel, macos-intel)": {
+      "total": 155,
+      "skipped": 25,
+      "passed": 130
     }
   },
   "jobs": [
-    {
-      "name": "native (macos-14, macos-arm64)",
-      "conclusion": "success"
-    },
     {
       "name": "linux-x11",
       "conclusion": "success"
     },
     {
-      "name": "native (macos-15-intel, macos-intel)",
+      "name": "native (windows-2025, windows-x64)",
       "conclusion": "success"
     },
     {
-      "name": "native (windows-2025, windows-x64)",
+      "name": "native (macos-14, macos-arm64)",
+      "conclusion": "success"
+    },
+    {
+      "name": "native (macos-15-intel, macos-intel)",
       "conclusion": "success"
     }
   ]
