@@ -5,11 +5,11 @@ import unittest
 from unittest.mock import Mock, patch
 from pathlib import Path
 
-from PyQt5.QtCore import QCoreApplication, QEvent, QObject, QPoint, QRect, Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QFontMetrics
-from PyQt5.QtWidgets import QApplication, QStyle, QStyleOptionButton, QStyleOptionComboBox, QStyleOptionViewItem
+from PyQt5.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice, QObject, QPoint, QRect, Qt, pyqtSignal
+from PyQt5.QtGui import QFont, QFontMetrics, QImage
+from PyQt5.QtWidgets import QApplication, QStyle, QStyleOptionButton, QStyleOptionComboBox, QStyleOptionToolButton, QStyleOptionViewItem
 
-from clipboard_app.store import Store
+from clipboard_app.store import Content, Store
 from clipboard_app.ui import HistoryDelegate, Panel
 
 
@@ -42,7 +42,6 @@ class LayoutTests(unittest.TestCase):
                         font.setPointSize(points)
                         app.setFont(font)
                         store = Store(Path(temporary) / 'history.sqlite3')
-                        store.set_setting('intro_seen', True)
                         store.set_setting('theme', theme)
                         clip = store.add('中文与 English 🧑‍💻 混合的长摘要。' * 8)
                         store.favorite(clip, True)
@@ -54,28 +53,47 @@ class LayoutTests(unittest.TestCase):
                             self.assertGreaterEqual(panel.history.viewport().height(),
                                                     panel.history.visualItemRect(panel.history.item(0)).height() + 4)
                             self.assertLess(panel.splitter.geometry().bottom(), panel.footer.geometry().top())
-                            for mode in (0, 1):
-                                panel.paste_mode.setCurrentIndex(mode)
-                                app.processEvents()
-                                option = QStyleOptionComboBox()
-                                panel.paste_mode.initStyleOption(option)
-                                area = panel.paste_mode.style().subControlRect(
-                                    QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, panel.paste_mode)
-                                metrics = panel.paste_mode.fontMetrics()
-                                self.assertGreaterEqual(area.width(), metrics.horizontalAdvance(panel.paste_mode.currentText()))
-                                self.assertGreaterEqual(area.height(), metrics.height())
-                            for button in (*panel.filter_buttons, panel.preview_button,
-                                           panel.copy_button, panel.paste_button):
-                                option = QStyleOptionButton()
-                                option.initFrom(button)
-                                option.text = button.text()
-                                area = button.style().subElementRect(QStyle.SE_PushButtonContents, option, button)
-                                self.assertGreaterEqual(area.width(), button.fontMetrics().horizontalAdvance(button.text()), button.text())
-                                self.assertGreaterEqual(area.height(), button.fontMetrics().height(), button.text())
-                                self.assertTrue(panel.rect().contains(QRect(button.mapTo(panel, QPoint()), button.size())), button.text())
+                            for combo in (panel.type_filter, panel.paste_mode):
+                                for selection in range(combo.count()):
+                                    combo.setCurrentIndex(selection)
+                                    app.processEvents()
+                                    option = QStyleOptionComboBox()
+                                    combo.initStyleOption(option)
+                                    area = combo.style().subControlRect(
+                                        QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo)
+                                    metrics = combo.fontMetrics()
+                                    self.assertGreaterEqual(area.width(), metrics.horizontalAdvance(combo.currentText()))
+                                    self.assertGreaterEqual(area.height(), max(metrics.height(), metrics.boundingRect(combo.currentText()).height()))
+                                combo.setCurrentIndex(0)
+                            button = panel.paste_button
+                            option = QStyleOptionButton()
+                            option.initFrom(button)
+                            option.text = button.text()
+                            area = button.style().subElementRect(QStyle.SE_PushButtonContents, option, button)
+                            self.assertGreaterEqual(area.width(), button.fontMetrics().horizontalAdvance(button.text()))
+                            self.assertGreaterEqual(area.height(), max(button.fontMetrics().height(), button.fontMetrics().boundingRect(button.text()).height()))
+                            for button in (panel.preview_button, panel.copy_button, panel.more):
+                                self.assertEqual(button.toolButtonStyle(), Qt.ToolButtonIconOnly)
+                                self.assertTrue(button.accessibleName())
+                                self.assertTrue(button.toolTip())
+                                self.assertFalse(button.icon().isNull())
+                                option = QStyleOptionToolButton()
+                                button.initStyleOption(option)
+                                area = button.style().subControlRect(
+                                    QStyle.CC_ToolButton, option, QStyle.SC_ToolButton, button)
+                                self.assertGreaterEqual(area.width(), button.iconSize().width())
+                                self.assertGreaterEqual(area.height(), button.iconSize().height())
+                            for control in (panel.search, panel.type_filter, panel.paste_mode,
+                                            panel.preview_button, panel.copy_button, panel.paste_button, panel.more):
+                                self.assertTrue(panel.rect().contains(QRect(control.mapTo(panel, QPoint()), control.size())), control.objectName())
+                            self.assertFalse(panel.state.isVisible())
                             panel.monitor.toggle_ignore()
                             app.processEvents()
                             self.assertGreaterEqual(panel.state.width(), panel.state.fontMetrics().horizontalAdvance(panel.state.text()))
+                            self.assertTrue(panel.state.isVisible())
+                            panel.monitor.toggle_ignore()
+                            app.processEvents()
+                            self.assertFalse(panel.state.isVisible())
                         finally:
                             panel.cleanup_timer.stop()
                             panel.tray.hide()
@@ -86,7 +104,79 @@ class LayoutTests(unittest.TestCase):
         finally:
             app.setFont(original)
 
-    def test_two_line_summary_preserves_unicode_and_expands_with_font(self):
+    def test_default_preview_and_search_share_a_compact_header(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Store(Path(temporary) / 'history.sqlite3')
+            store.add('默认可见的合成预览')
+            panel = Panel(store, PreviewMonitor())
+            try:
+                panel.show()
+                panel.resize(820, 530)
+                app.processEvents()
+                self.assertTrue(panel.preview_button.isChecked())
+                self.assertTrue(panel.preview_pane.isVisible())
+                self.assertEqual(panel.preview_pane.text.toPlainText(), '默认可见的合成预览')
+                self.assertEqual(panel.splitter.orientation(), Qt.Horizontal)
+                search = QRect(panel.search.mapTo(panel, QPoint()), panel.search.size())
+                types = QRect(panel.type_filter.mapTo(panel, QPoint()), panel.type_filter.size())
+                self.assertLess(search.right(), types.left())
+                self.assertTrue(search.top() <= types.center().y() <= search.bottom())
+                self.assertLess(max(search.bottom(), types.bottom()), panel.splitter.geometry().top())
+                self.assertLess(panel.stack.width(), panel.preview_pane.width())
+            finally:
+                panel.cleanup_timer.stop()
+                panel.tray.hide()
+                panel.hide()
+                panel.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                store.close()
+
+    def test_type_dropdown_filters_records_and_stays_in_sync_with_open_reset(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Store(Path(temporary) / 'history.sqlite3')
+            store.set_setting('preview_visible', False)
+            ordinary = store.add('普通合成文本')
+            favorite = store.add('收藏合成文本')
+            store.favorite(favorite, True)
+            image = QImage(4, 4, QImage.Format_RGB32)
+            image.fill(Qt.white)
+            buffer = QBuffer()
+            buffer.open(QIODevice.WriteOnly)
+            self.assertTrue(image.save(buffer, 'PNG'))
+            picture = store.add_content(Content(image=bytes(buffer.data()), width=4, height=4))
+            panel = Panel(store, PreviewMonitor())
+            try:
+                for kind, expected in (
+                    ('text', {ordinary, favorite}), ('image', {picture}),
+                    ('favorites', {favorite}), ('all', {ordinary, favorite, picture}),
+                ):
+                    with self.subTest(kind=kind):
+                        index = panel.type_filter.findData(kind)
+                        self.assertGreaterEqual(index, 0)
+                        panel.type_filter.setCurrentIndex(index)
+                        self.assertEqual({clip.id for clip in panel.clips}, expected)
+                panel.filter('favorites')
+                self.assertEqual(panel.type_filter.currentData(), 'favorites')
+                panel.search.setText('收藏')
+                self.assertEqual({clip.id for clip in panel.clips}, {favorite})
+                panel.type_filter.setCurrentIndex(panel.type_filter.findData('image'))
+                self.assertEqual(panel.clips, [])
+                self.assertEqual(panel.stack.currentWidget(), panel.empty)
+                self.assertFalse(panel.copy_button.isEnabled())
+                self.assertFalse(panel.paste_button.isEnabled())
+                panel.open_panel()
+                self.assertEqual(panel.search.text(), '')
+                self.assertEqual(panel.type_filter.currentData(), 'all')
+                self.assertEqual(len(panel.clips), 3)
+            finally:
+                panel.cleanup_timer.stop()
+                panel.tray.hide()
+                panel.hide()
+                panel.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                store.close()
+
+    def test_single_line_summary_elides_unicode_and_expands_with_font(self):
         text = '中文搜索 🧑‍💻 与 English，数字 0123456789，完整内容可预览。' * 6
         for pixels in (14, 24, 32):
             font = QFont(app.font())
@@ -94,7 +184,7 @@ class LayoutTests(unittest.TestCase):
             for width in (120, 300, 500):
                 with self.subTest(pixels=pixels, width=width):
                     lines = HistoryDelegate.title_lines(text, font, width)
-                    self.assertEqual(len(lines), 2)
+                    self.assertEqual(len(lines), 1)
                     for line in lines:
                         line.encode('utf-8')
                         self.assertLessEqual(QFontMetrics(font).horizontalAdvance(line), width)
@@ -124,7 +214,7 @@ class LayoutTests(unittest.TestCase):
     def test_preview_loads_only_when_open_and_releases_hidden_contents(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = Store(Path(temporary) / 'history.sqlite3')
-            store.set_setting('intro_seen', True)
+            store.set_setting('preview_visible', False)
             store.add('第一条合成内容')
             store.add('第二条合成内容')
             panel = Panel(store, PreviewMonitor())
@@ -164,12 +254,10 @@ class LayoutTests(unittest.TestCase):
     def test_preview_and_footer_adapt_without_overlap(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = Store(Path(temporary) / 'history.sqlite3')
-            store.set_setting('intro_seen', True)
             store.add('窄窗口中的中文预览。' * 30)
             panel = Panel(store, PreviewMonitor())
             try:
                 panel.show()
-                panel.preview()
                 for width, orientation in ((880, Qt.Horizontal), (440, Qt.Vertical)):
                     panel.resize(width, 680)
                     app.processEvents()
@@ -196,7 +284,7 @@ class LayoutTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as temporary:
                 store = Store(Path(temporary) / 'history.sqlite3')
-                store.set_setting('intro_seen', True)
+                store.set_setting('preview_visible', False)
                 store.add('合成短屏幕内容')
                 panel = Panel(store, PreviewMonitor())
                 screen = Mock()
@@ -223,19 +311,45 @@ class LayoutTests(unittest.TestCase):
     def test_large_inline_preview_keeps_navigation_lazy_and_original_intact(self):
         with tempfile.TemporaryDirectory() as temporary:
             store = Store(Path(temporary) / 'history.sqlite3')
-            store.set_setting('intro_seen', True)
             content = '完整长文本合成测试。' * 50_000
             identity = store.add(content)
             panel = Panel(store, PreviewMonitor())
             try:
-                panel.show()
                 with patch.object(store, 'get', wraps=store.get) as get:
-                    panel.preview()
+                    panel.show()
                     app.processEvents()
                     self.assertEqual(get.call_count, 0)
                     self.assertEqual(panel.preview_pane.clip_id, identity)
                     self.assertTrue(panel.preview_pane.full_button.isVisible())
                     self.assertLess(len(panel.preview_pane.text.toPlainText()), 1000)
+                self.assertEqual(store.get(identity).text, content)
+            finally:
+                panel.cleanup_timer.stop()
+                panel.tray.hide()
+                panel.hide()
+                panel.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                store.close()
+
+    def test_long_unbroken_text_stays_lazy_until_explicit_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Store(Path(temporary) / 'history.sqlite3')
+            content = 'abcdefghij' * 25_000
+            identity = store.add(content)
+            monitor = PreviewMonitor()
+            monitor.copy = Mock()
+            panel = Panel(store, monitor)
+            try:
+                with patch.object(store, 'get', wraps=store.get) as get:
+                    panel.show()
+                    app.processEvents()
+                    self.assertEqual(get.call_count, 0)
+                    self.assertEqual(panel.preview_pane.clip_id, identity)
+                    self.assertTrue(panel.preview_pane.full_button.isVisible())
+                    self.assertLess(len(panel.preview_pane.text.toPlainText()), 1000)
+                    panel.copy_only()
+                    self.assertEqual(get.call_count, 1)
+                self.assertEqual(monitor.copy.call_args.args[0].text, content)
                 self.assertEqual(store.get(identity).text, content)
             finally:
                 panel.cleanup_timer.stop()

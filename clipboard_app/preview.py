@@ -1,9 +1,11 @@
 """On-demand, read-only previews. No clipboard or database access."""
 
+from datetime import datetime
+
 from PyQt5.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QImageReader, QPixmap
 from PyQt5.QtWidgets import (
-    QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QLayout,
+    QDialog, QDialogButtonBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout,
     QPlainTextEdit, QPushButton, QScrollArea, QStackedWidget, QStyle, QToolButton,
     QVBoxLayout, QWidget,
 )
@@ -14,8 +16,10 @@ from .store import Clip
 from .widgets import WrappedLabel
 
 
+INLINE_TEXT_CHARACTERS = 20_000
+
+
 class PreviewPane(QWidget):
-    close_requested = pyqtSignal()
     paste_requested = pyqtSignal()
     copy_requested = pyqtSignal()
     dismiss_requested = pyqtSignal()
@@ -34,23 +38,8 @@ class PreviewPane(QWidget):
         self._pixmap = QPixmap()
         self._updating_image = False
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
-        header = QHBoxLayout()
-        self.title = QLabel('内容预览', self)
-        self.title.setObjectName('sectionTitle')
-        header.addWidget(self.title)
-        header.addStretch()
-        self.close_button = QToolButton(self)
-        self.close_button.setObjectName('quiet')
-        self.close_button.setText('×')
-        self.close_button.setAccessibleName('关闭预览')
-        self.close_button.setToolTip('关闭预览')
-        self.close_button.clicked.connect(self._close)
-        fit_text_control(self.close_button)
-        header.addWidget(self.close_button)
-        layout.addLayout(header)
-
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(0)
         self.scroll = QScrollArea(self)
         self.scroll.setFrameShape(QFrame.NoFrame)
         self.scroll.setWidgetResizable(True)
@@ -58,31 +47,9 @@ class PreviewPane(QWidget):
         self.body = QWidget(self.scroll)
         self.body.setFont(QFont(self.font()))
         body = QVBoxLayout(self.body)
-        body.setContentsMargins(0, 0, 4, 0)
-        body.setSpacing(8)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(12)
         body.setSizeConstraint(QLayout.SetMinimumSize)
-        self.metadata = WrappedLabel(parent=self.body)
-        self.metadata.setFont(QFont(self.font()))
-        self.metadata.setObjectName('sectionDescription')
-        body.addWidget(self.metadata)
-        self.note = WrappedLabel(parent=self.body)
-        self.note.setFont(QFont(self.font()))
-        self.note.setObjectName('sectionDescription')
-        body.addWidget(self.note)
-        self.full_button = QPushButton('查看完整内容', self.body)
-        self.full_button.setObjectName('quiet')
-        self.full_button.clicked.connect(self.full_requested)
-        fit_text_control(self.full_button)
-        body.addWidget(self.full_button, 0, Qt.AlignLeft)
-        self.image_mode = QToolButton(self.body)
-        self.image_mode.setObjectName('quiet')
-        self.image_mode.setText('原始尺寸')
-        self.image_mode.setToolTip('关闭时适应窗口，开启后按原始尺寸滚动查看')
-        self.image_mode.setCheckable(True)
-        self.image_mode.toggled.connect(self._update_image)
-        fit_text_control(self.image_mode)
-        body.addWidget(self.image_mode, 0, Qt.AlignLeft)
-
         self.stack = QStackedWidget(self.body)
         self.stack.setMinimumSize(0, 100)
         self.text = QPlainTextEdit(self.stack)
@@ -102,15 +69,65 @@ class PreviewPane(QWidget):
         self.image_label.setAccessibleName('图片预览')
         self.image_scroll.setWidget(self.image_label)
         self.image_scroll.viewport().installEventFilter(self)
-        for widget in (self.text, self.text.viewport(), self.image_scroll, self.image_mode):
+        for widget in (self.text, self.text.viewport(), self.image_scroll):
             widget.installEventFilter(self)
-        self.empty = WrappedLabel('选择一条内容进行预览。', self.stack)
+        self.empty = WrappedLabel('选择一条内容', self.stack)
         self.empty.setFont(QFont(self.font()))
         self.empty.setObjectName('sectionDescription')
-        self.empty.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.empty.setAlignment(Qt.AlignCenter)
         for widget in (self.empty, self.text, self.image_scroll):
             self.stack.addWidget(widget)
         body.addWidget(self.stack, 1)
+
+        self.controls = QWidget(self.body)
+        controls = QHBoxLayout(self.controls)
+        controls.setContentsMargins(0, 0, 0, 0)
+        self.full_button = QPushButton('完整查看', self.controls)
+        self.full_button.setObjectName('quiet')
+        self.full_button.setToolTip('打开完整内容；复制仍使用原内容')
+        self.full_button.clicked.connect(self.full_requested)
+        controls.addWidget(self.full_button)
+        controls.addStretch()
+        self.image_mode = QToolButton(self.controls)
+        self.image_mode.setObjectName('quiet')
+        self.image_mode.setText('原始尺寸')
+        self.image_mode.setToolTip('关闭时适应窗口，开启后按原始尺寸滚动查看')
+        self.image_mode.setCheckable(True)
+        self.image_mode.toggled.connect(self._update_image)
+        self.image_mode.installEventFilter(self)
+        controls.addWidget(self.image_mode)
+        for button in (self.full_button, self.image_mode):
+            fit_text_control(button)
+        body.addWidget(self.controls)
+
+        self.metadata = QWidget(self.body)
+        metadata = QVBoxLayout(self.metadata)
+        metadata.setContentsMargins(0, 0, 0, 0)
+        metadata.setSpacing(10)
+        divider = QFrame(self.metadata)
+        divider.setObjectName('previewDivider')
+        divider.setFrameShape(QFrame.NoFrame)
+        divider.setFixedHeight(1)
+        metadata.addWidget(divider)
+        details = QGridLayout()
+        details.setContentsMargins(0, 0, 0, 0)
+        details.setHorizontalSpacing(14)
+        details.setVerticalSpacing(5)
+        details.setColumnStretch(1, 1)
+        self.details = []
+        for row in range(4):
+            label = QLabel(self.metadata)
+            label.setObjectName('sectionDescription')
+            value = WrappedLabel(parent=self.metadata)
+            value.setObjectName('previewMetadataValue')
+            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            value.installEventFilter(self)
+            details.addWidget(label, row, 0, Qt.AlignTop)
+            details.addWidget(value, row, 1)
+            self.details.append((label, value))
+        metadata.addLayout(details)
+        body.addWidget(self.metadata)
         self.scroll.setWidget(self.body)
         layout.addWidget(self.scroll, 1)
         self.clear()
@@ -121,27 +138,46 @@ class PreviewPane(QWidget):
         self.image_label.clear()
         self.image_label.resize(1, 1)
         self.text.clear()
-        self.metadata.clear()
+        self.text.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        self.text.setToolTip('')
+        for label, value in self.details:
+            label.clear()
+            value.clear()
         self.metadata.hide()
-        self.note.clear()
-        self.note.hide()
+        self.controls.hide()
         self.full_button.hide()
         self.image_mode.setChecked(False)
         self.image_mode.hide()
-        self.empty.setText('选择一条内容进行预览。')
+        self.empty.setText('选择一条内容')
         self.stack.setCurrentWidget(self.empty)
         self._fit_minimum_width()
 
-    def set_summary(self, clip_id: int, summary_text: str, size: int):
+    @staticmethod
+    def _size_text(size):
+        return f'{size / 1048576:.1f} MiB' if size >= 1048576 else f'{size / 1024:.1f} KiB'
+
+    def _set_details(self, entries):
+        for row, (label, value) in enumerate(self.details):
+            visible = row < len(entries)
+            label.setVisible(visible)
+            value.setVisible(visible)
+            if visible:
+                name, text = entries[row]
+                label.setText(name)
+                value.setText(text)
+        self.metadata.show()
+
+    def set_summary(self, clip_id: int, summary_text: str, size: int, *, copied_at=None):
         self.clear()
         self.clip_id = clip_id
-        self.metadata.setText(f'内容摘要 · {size / 1048576:.1f} MiB')
-        self.metadata.show()
-        self.note.setText('内容较大，当前显示摘要。原内容已完整保留。')
-        self.note.show()
+        details = [('预览', '摘要'), ('存储大小', self._size_text(size))]
+        if copied_at is not None:
+            details.append(('复制时间', datetime.fromtimestamp(copied_at).strftime('%Y-%m-%d %H:%M')))
+        self._set_details(details)
         self.text.setPlainText(summary_text)
         self.stack.setCurrentWidget(self.text)
         self.full_button.show()
+        self.controls.show()
         self._fit_minimum_width()
 
     def set_clip(self, clip: Clip | None):
@@ -149,34 +185,37 @@ class PreviewPane(QWidget):
         if clip is None:
             return
         self.clip_id = clip.id
-        size = f'{clip.size / 1048576:.1f} MiB' if clip.size >= 1048576 else f'{clip.size / 1024:.1f} KiB'
         if clip.image:
             self._pixmap = QPixmap.fromImage(decoded_image(clip.image))
             if self._pixmap.isNull():
-                self.empty.setText('这张图片暂时无法显示。可以关闭预览后重试。')
+                self.empty.setText('图片暂时无法显示')
                 self._fit_minimum_width()
                 return
             buffer = QBuffer()
             buffer.setData(QByteArray(clip.image))
             buffer.open(QIODevice.ReadOnly)
             format_name = bytes(QImageReader(buffer).format()).decode('ascii', errors='replace').upper()
-            self.metadata.setText(f'{format_name or "图片"} · {self._pixmap.width()} × {self._pixmap.height()} 像素 · {size}')
+            details = [('类型', format_name or '图片'),
+                       ('尺寸', f'{self._pixmap.width()} × {self._pixmap.height()}')]
             self.image_mode.show()
+            self.controls.show()
             self.stack.setCurrentWidget(self.image_scroll)
             self._update_image()
         else:
-            self.metadata.setText(f'{"网页文本" if clip.html else "文本"} · {len(clip.text)} 字符 · {size}')
+            kind = '网页文本' if clip.html else '文本'
+            details = [('类型', f'{kind} · {len(clip.text)} 字符')]
+            # Wrapping a huge single line can block Qt's layout engine. Large
+            # explicit previews stay complete and scroll horizontally instead.
+            wrap_mode = (QPlainTextEdit.NoWrap if len(clip.text) > INLINE_TEXT_CHARACTERS
+                         else QPlainTextEdit.WidgetWidth)
+            self.text.setLineWrapMode(wrap_mode)
             self.text.setPlainText(clip.text)
             self.stack.setCurrentWidget(self.text)
-            if clip.html:
-                self.note.setText('已保留网页原格式，此处仅显示文字。')
-                self.note.show()
-        self.metadata.show()
+            self.text.setToolTip('已保留网页原格式；预览显示纯文本' if clip.html else '')
+        details.extend([('存储大小', self._size_text(clip.size)),
+                        ('复制时间', datetime.fromtimestamp(clip.copied_at).strftime('%Y-%m-%d %H:%M'))])
+        self._set_details(details)
         self._fit_minimum_width()
-
-    def _close(self):
-        self.clear()
-        self.close_requested.emit()
 
     def _update_image(self, *_):
         if self._pixmap.isNull() or self._updating_image:
@@ -218,11 +257,14 @@ class PreviewPane(QWidget):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() in (QEvent.FontChange, QEvent.StyleChange) and hasattr(self, 'empty'):
-            for widget in (self.body, self.text, self.title, self.close_button, self.image_mode,
-                           self.full_button, self.metadata, self.note, self.empty):
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange) and hasattr(self, 'details'):
+            for widget in (self.body, self.text, self.image_mode, self.full_button,
+                           self.metadata, self.empty):
                 widget.setFont(QFont(self.font()))
-            for button in (self.close_button, self.image_mode, self.full_button):
+            for label, value in self.details:
+                label.setFont(QFont(self.font()))
+                value.setFont(QFont(self.font()))
+            for button in (self.image_mode, self.full_button):
                 fit_text_control(button)
             self._fit_minimum_width()
 
@@ -234,8 +276,7 @@ class PreviewPane(QWidget):
         body_width = max(self.body.minimumWidth(), self.body.minimumSizeHint().width())
         content_width = (body_width + margins.left() + margins.right()
                          + 2 * self.scroll.frameWidth() + scrollbar)
-        width = self.title.minimumSizeHint().width() + self.close_button.minimumWidth() + 44
-        self.setMinimumWidth(max(220, width, content_width))
+        self.setMinimumWidth(max(220, content_width))
 
 
 class PreviewDialog(QDialog):
@@ -249,7 +290,6 @@ class PreviewDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 12)
         self.pane = PreviewPane(self)
-        self.pane.close_button.hide()
         self.pane.set_clip(clip)
         layout.addWidget(self.pane, 1)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Close, self)

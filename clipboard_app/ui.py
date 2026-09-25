@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 from PyQt5.QtCore import QEvent, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextLayout, QTextOption
+from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
 from PyQt5.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout,
     QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMenu,
@@ -20,6 +20,7 @@ from .platforms import Target
 from .store import Clip, Store
 from .widgets import WrappedLabel
 from .ui_icons import draw_symbol, symbol_icon
+from .preview import INLINE_TEXT_CHARACTERS, PreviewPane
 
 
 def app_icon() -> QIcon:
@@ -47,7 +48,7 @@ class SearchEdit(QLineEdit):
         super().__init__()
         self.composing = False
         self.last_commit = 0.0
-        self.setPlaceholderText("搜索复制过的内容…")
+        self.setPlaceholderText("搜索剪贴板…")
         self.setClearButtonEnabled(True)
         self.setAccessibleName("搜索剪贴板历史")
 
@@ -133,7 +134,10 @@ class HistoryDelegate(QStyledItemDelegate):
 
     @staticmethod
     def group_height(option, index):
-        return QFontMetrics(HistoryDelegate.caption_font(option.font)).height() + 16 if index.data(Qt.UserRole + 2) else 0
+        if not index.data(Qt.UserRole + 2):
+            return 0
+        metrics = QFontMetrics(HistoryDelegate.caption_font(option.font))
+        return max(metrics.height(), metrics.boundingRect("今天Ag").height()) + 16
 
     def content_rect(self, option, index):
         return option.rect.adjusted(0, self.group_height(option, index), 0, 0)
@@ -161,42 +165,22 @@ class HistoryDelegate(QStyledItemDelegate):
 
     @staticmethod
     def title_lines(text, font, width):
-        width = max(1, width)
-        layout = QTextLayout(text, font)
-        option = QTextOption()
-        option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
-        layout.setTextOption(option)
-        layout.beginLayout()
-        line = layout.createLine()
-        if not line.isValid():
-            layout.endLayout()
-            return [""]
-        line.setLineWidth(width)
-        # Qt string positions are UTF-16 offsets, not Python Unicode indices.
-        end = line.textLength() * 2
-        layout.endLayout()
-        encoded = text.encode("utf-16-le")
-        first = encoded[:end].decode("utf-16-le").rstrip()
-        rest = encoded[end:].decode("utf-16-le").lstrip()
-        return [first, QFontMetrics(font).elidedText(rest, Qt.ElideRight, width)] if rest else [first]
+        return [QFontMetrics(font).elidedText(text, Qt.ElideRight, max(1, width))]
 
     def dimensions(self, option, index, width):
         title = index.data(Qt.DisplayRole).partition("\n")[0]
-        inset = 42
+        inset = 30
         lines = self.title_lines(title, option.font, width - 62 - inset)
         metrics = QFontMetrics(option.font)
         line_height = max(metrics.height(), metrics.boundingRect('中文Ag').height()) + 2
-        caption_metrics = QFontMetrics(self.caption_font(option.font))
-        caption_height = max(caption_metrics.height(), caption_metrics.boundingRect('中文Ag').height()) + 2
-        return lines, line_height, caption_height, inset
+        return lines, line_height, 0, inset
 
     def sizeHint(self, option, index):
         width = option.widget.viewport().width() if option.widget else option.rect.width()
         lines, line_height, caption_height, inset = self.dimensions(option, index, width)
-        return QSize(200, self.group_height(option, index) + max(60, 16 + len(lines) * line_height + 3 + caption_height))
+        return QSize(200, self.group_height(option, index) + max(42, line_height + 16))
 
     def paint(self, painter, option, index):
-        _, _, description = index.data(Qt.DisplayRole).partition("\n")
         icon = index.data(Qt.DecorationRole)
         dark = bool(option.widget.property("dark"))
         painter.save()
@@ -207,22 +191,16 @@ class HistoryDelegate(QStyledItemDelegate):
             painter.setFont(self.caption_font(option.font))
             painter.setPen(QColor("#a4aebb" if dark else "#68727e"))
             group_rect = option.rect.adjusted(12, 3, -12, 0)
-            metrics = painter.fontMetrics()
             painter.drawText(group_rect, Qt.AlignTop | Qt.AlignLeft, group)
-            left = group_rect.left() + metrics.horizontalAdvance(group) + 12
-            y = group_rect.top() + metrics.height() // 2
-            if left < group_rect.right():
-                painter.setPen(QColor("#393e46" if dark else "#e5e9ee"))
-                painter.drawLine(left, y, group_rect.right(), y)
         star = self.star_rect(option, index).center()
         points = QPolygonF([QPointF(star.x() + (10 if i % 2 == 0 else 4.5) * math.cos(-math.pi / 2 + i * math.pi / 5),
                                    star.y() + (10 if i % 2 == 0 else 4.5) * math.sin(-math.pi / 2 + i * math.pi / 5)) for i in range(10)])
         selected = option.state & QStyle.State_Selected
         hovered = option.state & QStyle.State_MouseOver
         if selected or hovered:
-            background = ("#2c3b4e" if dark else "#edf3fa") if selected else ("#2d3138" if dark else "#f2f4f7")
+            background = ("#2c3b4e" if dark else "#edf1f7") if selected else ("#2d3138" if dark else "#f2f4f7")
             painter.setBrush(QColor(background))
-            painter.setPen(QColor("#425975" if dark else "#d5e0ee") if selected else Qt.NoPen)
+            painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(content_rect.adjusted(1, 1, -1, -1), 7, 7)
         lines, line_height, caption_height, inset = self.dimensions(option, index, option.rect.width())
         pinned = bool(index.data(Qt.UserRole + 1))
@@ -230,23 +208,16 @@ class HistoryDelegate(QStyledItemDelegate):
         painter.setBrush(QColor("#f5c451") if pinned else Qt.NoBrush)
         painter.drawPolygon(points)
         rect = content_rect.adjusted(12, 8, -50, -8)
-        icon_rect = QRect(rect.left(), rect.center().y() - 16, 30, 32)
+        icon_rect = QRect(rect.left(), rect.center().y() - 10, 20, 20)
         if isinstance(icon, QIcon) and not icon.isNull():
             icon.paint(painter, icon_rect, Qt.AlignCenter)
         else:
-            draw_symbol(painter, 'text', QRectF(icon_rect.adjusted(4, 4, -4, -4)),
+            draw_symbol(painter, 'text', QRectF(icon_rect),
                         '#a4aebb' if dark else '#68727e')
         rect.setLeft(rect.left() + inset)
         painter.setFont(option.font)
         painter.setPen(QColor("#e9edf2" if dark else "#232830"))
-        for number, text in enumerate(lines):
-            painter.drawText(QRect(rect.left(), rect.top() + number * line_height, rect.width(), line_height),
-                             Qt.AlignVCenter | Qt.TextSingleLine, text)
-        painter.setFont(self.caption_font(option.font))
-        painter.setPen(QColor("#a4aebb" if dark else "#68727e"))
-        painter.drawText(QRect(rect.left(), rect.top() + len(lines) * line_height + 3,
-                              rect.width(), caption_height), Qt.AlignVCenter | Qt.TextSingleLine,
-                         painter.fontMetrics().elidedText(description, Qt.ElideRight, rect.width()))
+        painter.drawText(rect, Qt.AlignVCenter | Qt.TextSingleLine, lines[0])
         painter.restore()
 
 
@@ -275,7 +246,7 @@ class Panel(QWidget):
         self.setWindowTitle("剪贴板")
         self.setWindowIcon(app_icon())
         self.setMinimumSize(440, 460)
-        self.resize(600, 580)
+        self.resize(820, 530)
         self._build()
         self._style()
         self.appearance.changed.connect(self._style)
@@ -302,27 +273,86 @@ class Panel(QWidget):
     def _build(self):
         root = QVBoxLayout(self)
         root.setSizeConstraint(QLayout.SetMinimumSize)
-        root.setContentsMargins(16, 12, 16, 12)
-        root.setSpacing(8)
-        header = QHBoxLayout()
-        title = QLabel("剪贴板")
-        title.setObjectName("title")
-        header.addWidget(title)
-        header.addStretch()
-        self.state = QLabel()
-        self.state.setObjectName("subtle")
-        header.addWidget(self.state)
-        self.settings_button = QToolButton()
-        self.settings_button.setObjectName("quiet")
-        self.settings_button.setAccessibleName("设置")
-        self.settings_button.setToolTip("设置")
-        self.settings_button.clicked.connect(lambda: self.settings())
-        header.addWidget(self.settings_button)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self.header = QWidget()
+        header = QHBoxLayout(self.header)
+        header.setContentsMargins(12, 8, 14, 8)
+        header.setSpacing(12)
+        self.search = SearchEdit()
+        self.search.setObjectName("historySearch")
+        self.search.setMinimumWidth(100)
+        self.search.setMinimumHeight(38)
+        self.search_icon = self.search.addAction(QIcon(), QLineEdit.LeadingPosition)
+        header.addWidget(self.search, 1)
+        self.type_filter = FormatComboBox()
+        self.type_filter.setObjectName("typeFilter")
+        self.type_filter.setAccessibleName("筛选内容类型")
+        for label, value in (("全部类型", "all"), ("文本", "text"), ("图片", "image"), ("收藏", "favorites")):
+            self.type_filter.addItem(label, value)
+        self.type_filter.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.type_filter.currentIndexChanged.connect(lambda: self.filter(self.type_filter.currentData()))
+        header.addWidget(self.type_filter)
+        root.addWidget(self.header)
+        divider = QFrame()
+        divider.setObjectName("divider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        self.stack = QStackedWidget()
+        self.history = HistoryList()
+        delegate = HistoryDelegate(self.history)
+        delegate.favorite_clicked.connect(self.toggle_favorite)
+        self.history.setItemDelegate(delegate)
+        self.history.setSpacing(1)
+        self.history.setIconSize(QSize(20, 20))
+        self.history.setUniformItemSizes(False)
+        self.history.setResizeMode(QListWidget.Adjust)
+        self.history.setMouseTracking(True)
+        self.history.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        self.history.setAccessibleName("历史记录")
+        self.history.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.history.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.history.customContextMenuRequested.connect(self.context_menu)
+        self.empty = QLabel("复制内容后会显示在这里")
+        self.empty.setAlignment(Qt.AlignCenter)
+        self.empty.setObjectName("empty")
+        self.empty.setWordWrap(True)
+        self.stack.addWidget(self.history)
+        self.stack.addWidget(self.empty)
+        self.preview_pane = PreviewPane(self, enable_actions=True)
+        self.preview_pane.paste_requested.connect(self.paste)
+        self.preview_pane.copy_requested.connect(self.copy_only)
+        self.preview_pane.dismiss_requested.connect(self.dismiss)
+        self.preview_pane.full_requested.connect(self.full_preview)
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(1)
+        self.splitter.addWidget(self.stack)
+        self.splitter.addWidget(self.preview_pane)
+        self.stack.setMinimumWidth(230)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.preview_pane.hide()
+        root.addWidget(self.splitter, 1)
+        divider = QFrame()
+        divider.setObjectName("divider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        self.footer = QWidget()
+        self.footer.setObjectName("panelFooter")
+        self.footer.setAttribute(Qt.WA_StyledBackground, True)
+        self.footer_layout = QGridLayout(self.footer)
+        self.footer_layout.setContentsMargins(12, 8, 14, 8)
+        self.footer_layout.setHorizontalSpacing(12)
+        self.footer_layout.setVerticalSpacing(8)
+        self.utilities = QWidget()
+        utilities = QHBoxLayout(self.utilities)
+        utilities.setContentsMargins(0, 0, 0, 0)
+        utilities.setSpacing(4)
         self.more = QToolButton()
         self.more.setObjectName("more")
         self.more.setIconSize(QSize(20, 20))
-        self.more.setAccessibleName("更多设置")
-        self.more.setToolTip("暂停、设置与数据管理")
+        self.more.setAccessibleName("更多操作与设置")
         self.more.setPopupMode(QToolButton.InstantPopup)
         self.menu = QMenu(self)
         self.pause_action = self.menu.addAction("暂停记录")
@@ -341,86 +371,12 @@ class Panel(QWidget):
         self.menu.addSeparator()
         self.menu.addAction("退出", QApplication.instance().quit)
         self.more.setMenu(self.menu)
-        header.addWidget(self.more)
-        root.addLayout(header)
-        self.search = SearchEdit()
-        self.search.setMinimumHeight(44)
-        self.search_icon = self.search.addAction(QIcon(), QLineEdit.LeadingPosition)
-        root.addWidget(self.search)
-        self.intro = WrappedLabel("仅在本机保存历史。可随时暂停记录或删除；首次启动不读取已有内容。")
-        self.intro.setWordWrap(True)
-        self.intro.setObjectName("intro")
-        self.intro.setVisible(not self.store.setting("intro_seen", False))
-        root.addWidget(self.intro)
-        filters = QHBoxLayout()
-        self.all_button = QPushButton("全部")
-        self.text_button = QPushButton("文本")
-        self.image_button = QPushButton("图片")
-        self.favorite_button = QPushButton("收藏")
-        self.filter_buttons = (self.all_button, self.text_button, self.image_button, self.favorite_button)
-        for button, value in zip(self.filter_buttons, ("all", "text", "image", "favorites")):
-            button.setCheckable(True)
-            button.setObjectName("filter")
-            button.clicked.connect(lambda checked, value=value: self.filter(value))
-            filters.addWidget(button)
-        self.all_button.setChecked(True)
-        filters.addStretch()
-        self.count = QLabel()
-        self.count.setObjectName("subtle")
-        filters.addWidget(self.count)
-        root.addLayout(filters)
-        self.stack = QStackedWidget()
-        self.history = HistoryList()
-        delegate = HistoryDelegate(self.history)
-        delegate.favorite_clicked.connect(self.toggle_favorite)
-        self.history.setItemDelegate(delegate)
-        self.history.setSpacing(2)
-        self.history.setIconSize(QSize(64, 44))
-        self.history.setUniformItemSizes(False)
-        self.history.setResizeMode(QListWidget.Adjust)
-        self.history.setVerticalScrollMode(QListWidget.ScrollPerPixel)
-        self.history.setAccessibleName("历史记录")
-        self.history.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.history.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.history.customContextMenuRequested.connect(self.context_menu)
-        self.empty = QLabel("还没有记录\n复制文字或图片，就会出现在这里。")
-        self.empty.setAlignment(Qt.AlignCenter)
-        self.empty.setObjectName("empty")
-        self.empty.setWordWrap(True)
-        self.stack.addWidget(self.history)
-        self.stack.addWidget(self.empty)
-        from .preview import PreviewPane
-        self.preview_pane = PreviewPane(self, enable_actions=True)
-        self.preview_pane.close_requested.connect(self.preview)
-        self.preview_pane.paste_requested.connect(self.paste)
-        self.preview_pane.copy_requested.connect(self.copy_only)
-        self.preview_pane.dismiss_requested.connect(self.dismiss)
-        self.preview_pane.full_requested.connect(self.full_preview)
-        self.splitter = QSplitter(Qt.Horizontal)
-        self.splitter.setChildrenCollapsible(False)
-        self.splitter.setHandleWidth(1)
-        self.splitter.addWidget(self.stack)
-        self.splitter.addWidget(self.preview_pane)
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 1)
-        self.preview_pane.hide()
-        root.addWidget(self.splitter, 1)
-        divider = QFrame()
-        divider.setObjectName("divider")
-        divider.setFixedHeight(1)
-        root.addWidget(divider)
-        self.footer = QWidget()
-        self.footer_layout = QGridLayout(self.footer)
-        self.footer_layout.setContentsMargins(0, 0, 0, 0)
-        self.footer_layout.setHorizontalSpacing(8)
-        self.footer_layout.setVerticalSpacing(8)
-        self.utilities = QWidget()
-        utilities = QHBoxLayout(self.utilities)
-        utilities.setContentsMargins(0, 0, 0, 0)
-        utilities.setSpacing(6)
-        self.preview_button = QPushButton("预览")
+        utilities.addWidget(self.more)
+        self.preview_button = QToolButton()
+        self.preview_button.setIconSize(QSize(20, 20))
+        self.preview_button.setAccessibleName("显示或隐藏预览")
         self.preview_button.setCheckable(True)
-        self.preview_button.setChecked(bool(self.store.setting("preview_open", False)))
+        self.preview_button.setChecked(bool(self.store.setting("preview_visible", True)))
         self.preview_button.setObjectName("quiet")
         utilities.addWidget(self.preview_button)
         self.paste_mode = FormatComboBox()
@@ -431,14 +387,20 @@ class Panel(QWidget):
         self.paste_mode.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.paste_mode.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.paste_mode.currentIndexChanged.connect(self._fit_paste_mode)
-        self.paste_mode.setToolTip("原格式保留图片或 HTML；纯文本只输出文字。两者都适用于「仅复制」。")
+        self.paste_mode.setToolTip("复制与粘贴格式：保留原格式，或只取文字")
         utilities.addWidget(self.paste_mode)
+        self.state = QLabel()
+        self.state.setObjectName("subtle")
+        utilities.addWidget(self.state)
         utilities.addStretch()
         self.actions = QWidget()
         actions = QHBoxLayout(self.actions)
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(8)
-        self.copy_button = QPushButton("仅复制")
+        self.copy_button = QToolButton()
+        self.copy_button.setObjectName("quiet")
+        self.copy_button.setIconSize(QSize(20, 20))
+        self.copy_button.setAccessibleName("仅复制")
         self.paste_button = QPushButton("粘贴")
         self.paste_button.setObjectName("primary")
         actions.addWidget(self.copy_button)
@@ -450,17 +412,16 @@ class Panel(QWidget):
         self.notice.setWordWrap(True)
         self.notice.setObjectName("notice")
         self.notice.hide()
+        self.notice_timer = QTimer(self)
+        self.notice_timer.setSingleShot(True)
+        self.notice_timer.timeout.connect(self.notice.hide)
         root.addWidget(self.notice)
         root.addWidget(self.footer)
-        self.hint = WrappedLabel("↑ ↓ 选择    Enter 粘贴    Ctrl+Enter 复制    Esc 关闭")
-        self.hint.setObjectName("hint")
-        root.addWidget(self.hint)
         modifier = "⌘" if sys.platform == "darwin" else "Ctrl+"
-        if sys.platform == "darwin":
-            self.hint.setText("↑ ↓ 选择    Return 粘贴    ⌘Return 复制    Esc 关闭")
         self.paste_button.setToolTip("粘贴到原窗口 · Enter")
         self.copy_button.setToolTip("仅复制 · " + modifier + "Enter")
         self.preview_button.setToolTip("展开或收起预览 · " + modifier + "Space")
+        self.search.setToolTip("↑ ↓ 选择 · Enter 粘贴 · " + modifier + "Enter 复制 · Esc 关闭")
         self.search.textChanged.connect(self.refresh)
         self.search.move_selection.connect(self.move_selection)
         self.search.paste_selected.connect(self.paste)
@@ -483,11 +444,21 @@ class Panel(QWidget):
             self._shortcuts.append(shortcut)
 
     def _fit_paste_mode(self):
-        # Native styles disagree on how much width a custom combo's arrow uses.
-        metrics = self.paste_mode.fontMetrics()
-        text_width = max(metrics.horizontalAdvance(self.paste_mode.itemText(i))
-                         for i in range(self.paste_mode.count()))
-        self.paste_mode.setMinimumWidth(text_width + 56)
+        self._fit_combo(self.paste_mode)
+
+    @staticmethod
+    def _fit_combo(combo):
+        combo.ensurePolished()
+        metrics = combo.fontMetrics()
+        labels = [combo.itemText(i) for i in range(combo.count())]
+        text_width = max(metrics.horizontalAdvance(label) for label in labels)
+        text_height = max(metrics.height(), *(metrics.boundingRect(label).height() for label in labels))
+        option = QStyleOptionComboBox()
+        combo.initStyleOption(option)
+        option.rect = QRect(0, 0, 512, 128)
+        area = combo.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo)
+        combo.setMinimumWidth(text_width + option.rect.width() - area.width() + 4)
+        combo.setMinimumHeight(text_height + option.rect.height() - area.height() + 4)
 
     def _style(self):
         theme = self.store.setting("theme", "system")
@@ -499,7 +470,7 @@ class Panel(QWidget):
             primary, primary_ink = "#a9bfd9", "#182433"
         else:
             canvas, surface, ink, muted, line, accent, selection = (
-                "#f5f6f8", "#ffffff", "#222a35", "#77808e", "#e3e7ed", "#4b6485", "#edf2f8")
+                "#f8f9fb", "#ffffff", "#20242a", "#818995", "#e4e7ec", "#4b6485", "#edf1f7")
             hover, warning, warning_ink = "#f2f4f7", "#fff5e4", "#805e2d"
             primary, primary_ink = "#354a64", "#ffffff"
         font = QFont(QApplication.font())
@@ -509,30 +480,36 @@ class Panel(QWidget):
         font.setPointSizeF(max(10, font.pointSizeF() - 2))
         self.setFont(font)
         for control in (self.search, self.history, self.empty, self.paste_mode,
-                        *self.filter_buttons, self.preview_button, self.copy_button, self.paste_button):
+                        self.type_filter, self.preview_button, self.copy_button, self.paste_button, self.state):
             control.setFont(font)
         caption = max(9, font.pointSizeF() - 1.5)
         stylesheet = f"""
             QWidget {{ color: {ink}; background: {surface}; }}
-            QLabel#title {{ font-size: {font.pointSizeF() + 1}pt; font-weight: 600; }}
-            QLabel#subtle, QLabel#hint, QLabel#sectionDescription {{ color: {muted}; font-size: {caption}pt; }}
+            QLabel#subtle, QLabel#sectionDescription, QLabel#previewMetadataValue {{ color: {muted}; font-size: {caption}pt; }}
             QLabel#empty {{ color: {muted}; padding: 16px; }}
-            QLabel#intro {{ color: {muted}; background: {canvas}; padding: 10px; border-radius: 6px; font-size: {caption}pt; }}
             QLabel#notice {{ color: {warning_ink}; background: {warning}; padding: 8px; border-radius: 6px; font-size: {caption}pt; }}
-            QFrame#divider {{ background: {line}; border: none; }}
+            QLabel#notice[success="true"] {{ color: {ink}; background: {canvas}; }}
+            QFrame#divider, QFrame#previewDivider {{ background: {line}; border: none; }}
             QLineEdit {{ background: {canvas}; border: 1px solid {line}; border-radius: 8px; padding: 8px 12px; }}
             QLineEdit:focus {{ background: {surface}; border-color: {accent}; }}
+            QLineEdit#historySearch {{ background: {surface}; border: none; border-radius: 0; padding: 6px 4px; }}
+            QLineEdit#historySearch:focus {{ border: none; }}
+            QWidget#panelFooter, QWidget#panelFooter > QWidget {{ background: {canvas}; }}
+            QWidget#panelFooter QLabel {{ background: transparent; }}
             QComboBox, QSpinBox {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 6px 10px; }}
-            QComboBox#pasteMode, QComboBox#settingsChoice {{ padding-right: 30px; }}
-            QComboBox#pasteMode::drop-down, QComboBox#settingsChoice::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
-            QComboBox#pasteMode::down-arrow, QComboBox#settingsChoice::down-arrow {{ image: none; }}
+            QComboBox#pasteMode, QComboBox#typeFilter, QComboBox#settingsChoice {{ padding-right: 30px; }}
+            QComboBox#pasteMode::drop-down, QComboBox#typeFilter::drop-down, QComboBox#settingsChoice::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }}
+            QComboBox#pasteMode::down-arrow, QComboBox#typeFilter::down-arrow, QComboBox#settingsChoice::down-arrow {{ image: none; }}
+            QComboBox#pasteMode {{ background: transparent; border-color: transparent; color: {muted}; padding-left: 8px; }}
+            QComboBox#pasteMode:focus {{ border-color: {accent}; }}
+            QComboBox#typeFilter {{ background: transparent; padding-top: 4px; padding-bottom: 4px; }}
             QSpinBox#settingsNumber {{ padding-right: 26px; }}
             QSpinBox#settingsNumber::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 24px; border: none; background: transparent; }}
             QSpinBox#settingsNumber::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 24px; border: none; background: transparent; }}
             QSpinBox#settingsNumber::up-arrow, QSpinBox#settingsNumber::down-arrow {{ image: none; }}
             QComboBox:focus, QSpinBox:focus {{ border-color: {accent}; }}
             QComboBox QAbstractItemView {{ background: {surface}; color: {ink}; selection-background-color: {selection}; selection-color: {ink}; }}
-            QListWidget {{ background: {surface}; border: none; outline: none; }}
+            QListWidget {{ background: {surface}; border: none; outline: none; padding: 8px; }}
             QPushButton, QToolButton {{ background: {surface}; border: 1px solid {line}; border-radius: 6px; padding: 7px 14px; }}
             QPushButton:hover, QToolButton:hover {{ background: {hover}; border-color: {accent}; }}
             QPushButton:focus, QToolButton:focus {{ border-color: {accent}; }}
@@ -540,16 +517,13 @@ class Panel(QWidget):
             QPushButton#primary {{ background: {primary}; color: {primary_ink}; border-color: {primary}; }}
             QPushButton#primary:hover {{ background: {accent}; border-color: {accent}; }}
             QPushButton#primary:disabled {{ background: {line}; color: {muted}; border-color: {line}; }}
-            QPushButton#filter {{ border: 1px solid transparent; background: transparent; color: {muted}; padding: 5px 12px; }}
-            QPushButton#filter:checked {{ background: {selection}; color: {accent}; }}
-            QPushButton#filter:focus {{ border-color: {accent}; }}
             QPushButton#quiet, QToolButton#quiet, QToolButton#more {{ background: transparent; color: {muted}; border-color: transparent; padding: 6px 9px; }}
             QPushButton#quiet:hover, QToolButton#quiet:hover, QToolButton#more:hover {{ background: {hover}; color: {ink}; }}
             QPushButton#quiet:focus, QToolButton#quiet:focus, QToolButton#more:focus {{ border-color: {accent}; }}
             QPushButton#quiet:disabled {{ color: {muted}; }}
-            QPushButton#quiet:checked {{ background: {selection}; color: {accent}; }}
+            QPushButton#quiet:checked, QToolButton#quiet:checked {{ background: {selection}; color: {accent}; }}
             QLabel#sectionTitle {{ font-weight: 600; }}
-            QWidget#previewPane {{ background: {canvas}; border-radius: 8px; }}
+            QWidget#previewPane {{ background: {surface}; }}
             QSplitter::handle {{ background: {line}; }}
             QTabWidget#settingsTabs::pane {{ border: none; }}
             QTabBar::tab {{ color: {muted}; padding: 10px 18px; border-bottom: 2px solid transparent; }}
@@ -580,15 +554,16 @@ class Panel(QWidget):
         self.setStyleSheet(stylesheet)
         self.ensurePolished()
         self._fit_paste_mode()
+        self._fit_combo(self.type_filter)
         self.search_icon.setIcon(symbol_icon("search", muted))
-        self.settings_button.setIcon(symbol_icon("settings", muted))
+        self.copy_button.setIcon(symbol_icon("copy", muted))
         self.more.setIcon(symbol_icon("more", muted))
         self.preview_button.setIcon(symbol_icon("preview", muted))
-        # Even the smallest window must fit one two-line record and its caption.
-        body_height = self.history.fontMetrics().height() + 2
-        caption_font = HistoryDelegate.caption_font(self.history.font())
-        caption_height = QFontMetrics(caption_font).height() + 2
-        self.stack.setMinimumHeight(24 + 2 * body_height + 2 * caption_height + 20)
+        # Reserve space for one complete date group and row at the actual font size.
+        metrics = self.history.fontMetrics()
+        body_height = max(metrics.height(), metrics.boundingRect("中文Ag").height()) + 18
+        caption_height = QFontMetrics(HistoryDelegate.caption_font(self.history.font())).height() + 16
+        self.stack.setMinimumHeight(body_height + caption_height + 22)
         self.history.doItemsLayout()
         self._adapt_layout()
 
@@ -624,7 +599,8 @@ class Panel(QWidget):
             stamp = copied.strftime("%H:%M")
             detail = f"{clip.width} × {clip.height}" if clip.kind == "image" else "网页" if clip.rich else "文本"
             description = ("已收藏 · " if clip.pinned else "") + f"{stamp} · {detail}"
-            item = QListWidgetItem(title + "\n" + description)
+            item = QListWidgetItem(title)
+            item.setToolTip(description)
             if clip.thumbnail:
                 thumbnail = QPixmap()
                 thumbnail.loadFromData(clip.thumbnail, "PNG")
@@ -633,8 +609,8 @@ class Panel(QWidget):
             item.setData(Qt.UserRole + 1, clip.pinned)
             if copied.date() != previous_date:
                 today = datetime.now().date()
-                prefix = "今天 · " if copied.date() == today else "昨天 · " if copied.date() == today - timedelta(days=1) else ""
-                item.setData(Qt.UserRole + 2, prefix + copied.strftime("%Y-%m-%d"))
+                group = "今天" if copied.date() == today else "昨天" if copied.date() == today - timedelta(days=1) else copied.strftime("%Y-%m-%d")
+                item.setData(Qt.UserRole + 2, group)
                 previous_date = copied.date()
             item.setData(Qt.AccessibleDescriptionRole, "已收藏，可取消收藏" if clip.pinned else "点击右侧星标收藏")
             self.history.addItem(item)
@@ -643,18 +619,17 @@ class Panel(QWidget):
         if self.history.currentRow() < 0 and self.clips:
             self.history.setCurrentRow(0)
         self.history.blockSignals(False)
-        self.count.setText(f"{len(self.clips)} 条")
         self.stack.setCurrentWidget(self.history if self.clips else self.empty)
         if self.search.text():
-            self.empty.setText("没有找到匹配内容\n试试更短的关键词。")
+            self.empty.setText("没有匹配的内容")
         elif self.favorites_only:
-            self.empty.setText("还没有收藏\n点击记录右侧的星标，即可收藏。")
+            self.empty.setText("还没有收藏\n点击记录右侧 ☆ 收藏")
         elif self.monitor.paused:
-            self.empty.setText("记录已暂停\n在右上角菜单恢复后，新的复制会出现在这里。")
+            self.empty.setText("记录已暂停\n可从左下角菜单恢复")
         elif self.kind == "image":
-            self.empty.setText("还没有图片\n复制截图或图片后会出现在这里；文件复制不记录。")
+            self.empty.setText("还没有复制过图片")
         else:
-            self.empty.setText("还没有记录\n复制文字或图片，就会出现在这里。")
+            self.empty.setText("复制内容后会显示在这里")
         self.selection_changed()
 
     def history_changed(self):
@@ -666,8 +641,9 @@ class Panel(QWidget):
         value = "favorites" if value is True else "all" if value is False else value
         self.favorites_only = value == "favorites"
         self.kind = value if value in ("text", "image") else "all"
-        for button, name in zip(self.filter_buttons, ("all", "text", "image", "favorites")):
-            button.setChecked(value == name)
+        self.type_filter.blockSignals(True)
+        self.type_filter.setCurrentIndex(self.type_filter.findData(value))
+        self.type_filter.blockSignals(False)
         self.refresh()
 
     def selection_changed(self, *_):
@@ -686,8 +662,11 @@ class Panel(QWidget):
             self.history.setCurrentRow(row)
 
     def update_state(self):
-        state = "已暂停" if self.monitor.paused else ("将忽略下次复制" if self.monitor.ignore_next else "正在处理…" if self.monitor.processing else "正在记录")
+        state = "已暂停" if self.monitor.paused else ("忽略下次" if self.monitor.ignore_next else "正在处理…" if self.monitor.processing else "正在记录")
         self.state.setText(state)
+        self.state.setVisible(self.monitor.paused or self.monitor.ignore_next or self.monitor.processing)
+        self.more.setToolTip(f"{state} · 更多操作与设置")
+        self._adapt_layout()
         self.tray.setToolTip(f"剪贴板 · {state} · {self.shortcut}")
         self.pause_action.setChecked(self.monitor.paused)
         self.ignore_action.setEnabled(not self.monitor.paused)
@@ -736,8 +715,6 @@ class Panel(QWidget):
             self.open_panel()
 
     def dismiss(self):
-        self.store.set_setting("intro_seen", True)
-        self.intro.hide()
         self.hide()
         if self.target and self.backend:
             self.backend.activate(self.target)
@@ -779,7 +756,7 @@ class Panel(QWidget):
         clip = self.selected()
         if clip:
             self.monitor.copy(clip, plain=self.paste_mode.currentData())
-            self.show_notice(f"已按{self.paste_mode.currentText()}复制，可回到目标位置手动粘贴。")
+            self.show_notice("已复制", transient=True)
 
     def paste_failed(self, message: str):
         self.show_notice(message)
@@ -788,9 +765,15 @@ class Panel(QWidget):
         self.activateWindow()
         self.search.setFocus()
 
-    def show_notice(self, message: str):
+    def show_notice(self, message: str, *, transient=False):
+        self.notice_timer.stop()
+        self.notice.setProperty("success", transient)
+        self.notice.style().unpolish(self.notice)
+        self.notice.style().polish(self.notice)
         self.notice.setText(message)
         self.notice.show()
+        if transient:
+            self.notice_timer.start(2000)
 
     def recording_notice(self, message: str):
         self.pending_notice = message
@@ -828,7 +811,7 @@ class Panel(QWidget):
     def _adapt_layout(self):
         if not hasattr(self, "footer"):
             return
-        available = self.width() - 32
+        available = self.width() - 26
         needed = self.utilities.minimumSizeHint().width() + self.actions.sizeHint().width() + 12
         stacked = available < needed
         if stacked != self._footer_stacked:
@@ -837,14 +820,15 @@ class Panel(QWidget):
             self.footer_layout.removeWidget(self.actions)
             self.footer_layout.addWidget(self.utilities, 0, 0, 1, 2 if stacked else 1)
             self.footer_layout.addWidget(self.actions, 1 if stacked else 0, 1, Qt.AlignRight)
-        orientation = Qt.Horizontal if self.width() >= 800 else Qt.Vertical
+        orientation = Qt.Horizontal if self.width() >= 720 else Qt.Vertical
         if self.splitter.orientation() != orientation:
             self.splitter.setOrientation(orientation)
             self._balance_preview()
 
     def _balance_preview(self):
         extent = self.splitter.width() if self.splitter.orientation() == Qt.Horizontal else self.splitter.height()
-        self.splitter.setSizes([extent // 2, extent - extent // 2])
+        left = round(extent * 0.4) if self.splitter.orientation() == Qt.Horizontal else extent // 2
+        self.splitter.setSizes([left, extent - left])
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -855,6 +839,7 @@ class Panel(QWidget):
         if not self._initial_size_fitted:
             self._fit_on_screen()
             self._initial_size_fitted = True
+            self._balance_preview()
         self._update_preview()
 
     def _fit_on_screen(self):
@@ -879,16 +864,16 @@ class Panel(QWidget):
 
     def _preview_toggled(self):
         opened = self.preview_button.isChecked()
-        self.store.set_setting("preview_open", opened)
+        self.store.set_setting("preview_visible", opened)
         self.preview_pane.setVisible(opened)
         if opened:
             screen = self.screen().availableGeometry() if self.screen() else None
-            if self.width() < 800 and screen and screen.width() >= 900:
+            if self.width() < 720 and screen and screen.width() >= 840:
                 self.splitter.setOrientation(Qt.Horizontal)
                 self.layout().activate()
                 frame = self.frameGeometry().size() - self.size()
-                self.resize(min(880, screen.width() - frame.width()),
-                            min(max(580, self.height()), screen.height() - frame.height()))
+                self.resize(min(820, screen.width() - frame.width()),
+                            min(max(530, self.height()), screen.height() - frame.height()))
                 self.move(max(screen.left(), min(self.x(), screen.right() - self.frameGeometry().width() + 1)),
                           max(screen.top(), min(self.y(), screen.bottom() - self.frameGeometry().height() + 1)))
             self._balance_preview()
@@ -908,8 +893,8 @@ class Panel(QWidget):
         if key != self._preview_key:
             # Navigating history should not decode a very large body synchronously.
             limit = 16 * 1048576 if summary and summary.kind == "image" else 1048576
-            if summary and summary.size > limit:
-                self.preview_pane.set_summary(summary.id, summary.name or summary.preview, summary.size)
+            if summary and (summary.size > limit or summary.characters > INLINE_TEXT_CHARACTERS):
+                self.preview_pane.set_summary(summary.id, summary.name or summary.preview, summary.size, copied_at=summary.copied_at)
             else:
                 self.preview_pane.set_clip(self.store.get(summary.id) if summary else None)
             self._preview_key = key
