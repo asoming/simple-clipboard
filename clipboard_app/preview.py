@@ -4,7 +4,7 @@ from PyQt5.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QSize, Qt, pyqt
 from PyQt5.QtGui import QFont, QImageReader, QPixmap
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QLayout,
-    QPlainTextEdit, QPushButton, QScrollArea, QStackedWidget, QToolButton,
+    QPlainTextEdit, QPushButton, QScrollArea, QStackedWidget, QStyle, QToolButton,
     QVBoxLayout, QWidget,
 )
 
@@ -154,6 +154,7 @@ class PreviewPane(QWidget):
             self._pixmap = QPixmap.fromImage(decoded_image(clip.image))
             if self._pixmap.isNull():
                 self.empty.setText('这张图片暂时无法显示。可以关闭预览后重试。')
+                self._fit_minimum_width()
                 return
             buffer = QBuffer()
             buffer.setData(QByteArray(clip.image))
@@ -171,6 +172,7 @@ class PreviewPane(QWidget):
                 self.note.setText('已保留网页原格式，此处仅显示文字。')
                 self.note.show()
         self.metadata.show()
+        self._fit_minimum_width()
 
     def _close(self):
         self.clear()
@@ -225,10 +227,15 @@ class PreviewPane(QWidget):
             self._fit_minimum_width()
 
     def _fit_minimum_width(self):
+        self.body.layout().activate()
+        margins = self.layout().contentsMargins()
+        scrollbar = self.scroll.style().pixelMetric(QStyle.PM_ScrollBarExtent, None, self.scroll)
+        # The body must still fit when a short pane needs a vertical scrollbar.
+        body_width = max(self.body.minimumWidth(), self.body.minimumSizeHint().width())
+        content_width = (body_width + margins.left() + margins.right()
+                         + 2 * self.scroll.frameWidth() + scrollbar)
         width = self.title.minimumSizeHint().width() + self.close_button.minimumWidth() + 44
-        if not self.full_button.isHidden():
-            width = max(width, self.full_button.minimumWidth() + 52)
-        self.setMinimumWidth(max(220, width))
+        self.setMinimumWidth(max(220, width, content_width))
 
 
 class PreviewDialog(QDialog):

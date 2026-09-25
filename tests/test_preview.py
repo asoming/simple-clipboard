@@ -9,7 +9,10 @@ from unittest.mock import Mock, patch
 from PyQt5.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage
 from PyQt5.QtTest import QSignalSpy, QTest
-from PyQt5.QtWidgets import QApplication, QStyle, QStyleOptionButton, QWidget
+from PyQt5.QtWidgets import (
+    QApplication, QFrame, QProxyStyle, QStyle, QStyleFactory,
+    QStyleOptionButton, QWidget,
+)
 
 from clipboard_app.content import png_bytes
 from clipboard_app.preview import PreviewDialog, PreviewPane
@@ -152,6 +155,37 @@ class PreviewTests(unittest.TestCase):
             self.assertEqual(dialog.pane.text.toPlainText(), '')
         finally:
             parent.deleteLater()
+
+    def test_summary_body_fits_with_wide_scrollbar_and_frame(self):
+        class WideScrollbarStyle(QProxyStyle):
+            def pixelMetric(self, metric, option=None, widget=None):
+                if metric == QStyle.PM_ScrollBarExtent:
+                    return 29
+                return super().pixelMetric(metric, option, widget)
+
+        for points in (20, 26):
+            with self.subTest(points=points):
+                parent = QWidget()
+                font = QFont(parent.font())
+                font.setPointSize(points)
+                parent.setFont(font)
+                pane = PreviewPane(parent)
+                pane.setWindowFlag(Qt.Window)
+                pane.resize(220, 160)
+                style = WideScrollbarStyle(QStyleFactory.create('Fusion'))
+                style.setParent(pane)
+                pane.scroll.setStyle(style)
+                pane.scroll.verticalScrollBar().setStyle(style)
+                pane.scroll.setFrameShape(QFrame.StyledPanel)
+                pane.set_summary(8, '已有摘要，完整内容等待主动打开。', 42 * 1048576)
+                pane.show()
+                app.processEvents()
+                try:
+                    self.assertGreater(pane.scroll.verticalScrollBar().maximum(), 0)
+                    self.assertLessEqual(pane.body.width(), pane.scroll.viewport().width())
+                finally:
+                    parent.deleteLater()
+                    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_inline_preview_routes_paste_copy_and_dismiss_without_rewriting_text(self):
         pane = PreviewPane(enable_actions=True)
