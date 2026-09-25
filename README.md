@@ -1,27 +1,27 @@
 # Simple Clipboard · 剪贴板
 
-本地桌面剪贴板管理器 · 0.7.0 工程预览（验证中） · GPL-3.0
+本地桌面剪贴板管理器 · 0.7.0 工程预览 · GPL-3.0
 
 简洁的本地剪贴板工具，支持文字、HTML 和静态图片。已验证 Ubuntu 22.04 / GNOME / X11；第三阶段加入 Windows 11、macOS 14 起的适配，Mac 提供 Intel 与 Apple Silicon 两种包。完整支持声明以验收报告为准。
 
 ![浅色分栏主界面，使用合成示例](docs/images/minimal-main-light.png)
 
-0.7.0 按用户提供的分栏参考精简界面：顶部搜索与类型筛选、左侧单行日期列表、右侧默认预览，减少常驻说明。浅色保持克制清晰，次要操作集中在底部图标与菜单。本轮本机隔离回归与布局检查通过，三端构建及公开交付正在准备，状态见 [浅色极简界面验收](docs/浅色极简界面验收.md)。
+0.7.0 按用户提供的分栏参考精简界面：顶部搜索与类型筛选、左侧单行日期列表、右侧默认预览，减少常驻说明。浅色保持克制清晰，次要操作集中在底部图标与菜单。本轮本机隔离回归、布局检查与三端构建通过，本机已更新；发布和实机验收状态见 [浅色极简界面验收](docs/浅色极简界面验收.md)。
 
 已交付的 0.5.0 支持更换历史保存文件夹，并修复后台面板沿用旧粘贴目标的问题。自动粘贴失败会区分焦点未返回与修饰键未松开；Codex 的用户场景仍需实际试用。见 [目录与粘贴验收](docs/保存目录与粘贴修复验收.md)。
 
 ## 安装与启动
 
-目前可下载 [已发布的 0.6.0 预览版](https://github.com/asoming/simple-clipboard/releases/tag/v0.6.0-preview.1)：
+[0.7.0 工程预览的安装包与源码](https://github.com/asoming/simple-clipboard/releases/tag/v0.7.0-preview.1)：
 
 | 系统 | 安装包 |
 |---|---|
-| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-windows-x64-setup.exe) |
-| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-macos-arm64.dmg) |
-| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/SimpleClipboard-0.6.0-preview-macos-intel.dmg) |
-| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.6.0-preview.1/simple-clipboard_0.6.0-preview1_all.deb) |
+| Windows 11 x64（实机待验收） | [Windows 安装器](https://github.com/asoming/simple-clipboard/releases/download/v0.7.0-preview.1/SimpleClipboard-0.7.0-preview-windows-x64-setup.exe) |
+| macOS 14+ Apple Silicon | [Apple Silicon dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.7.0-preview.1/SimpleClipboard-0.7.0-preview-macos-arm64.dmg) |
+| macOS 14+ Intel（14 基线待验收） | [Intel dmg](https://github.com/asoming/simple-clipboard/releases/download/v0.7.0-preview.1/SimpleClipboard-0.7.0-preview-macos-intel.dmg) |
+| Ubuntu 22.04 X11 | [Ubuntu deb](https://github.com/asoming/simple-clipboard/releases/download/v0.7.0-preview.1/simple-clipboard_0.7.0-preview1_all.deb) |
 
-Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.6.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
+Windows 运行安装器；Mac 打开 dmg，将应用拖入 Applications 后再启动。Ubuntu 用 `sudo apt install ./simple-clipboard_0.7.0-preview1_all.deb` 安装。Release 同时附有 `SHA256SUMS`、验证记录和对应源码；源码开发使用默认 `main` 分支。
 
 在 Ubuntu 22.04 安装系统依赖后运行（需要 X11 桌面会话）：
 
@@ -65,7 +65,7 @@ Windows/macOS 对应源码可从同一 Release 的 `sources.zip` 附件获取，
 
 Mac 的面板内 Ctrl 快捷键对应 Cmd，例如 Cmd+Enter 仅复制。
 
-预览关闭时不加载完整正文；关闭或隐藏主面板时释放当前预览。文本记录超过 20,000 字符或 1 MiB、图片记录超过 16 MiB 时，内嵌区域先显示摘要，点击「查看完整内容」或右键打开完整预览。完整长文本使用横向滚动，避免长单行自动折行造成停顿。保存和复制的数据保持完整；明确打开大内容仍可能需要等待。
+预览关闭时不加载完整正文；关闭或隐藏主面板时释放当前预览。文本记录超过 20,000 字符或 1 MiB、图片记录超过 16 MiB 时，内嵌区域先显示摘要，点击「完整查看」或右键打开完整预览。完整长文本使用横向滚动，避免长单行自动折行造成停顿。保存和复制的数据保持完整；明确打开大内容仍可能需要等待。
 
 ![浅色图片预览，使用合成图像](docs/images/minimal-image-light.png)
 

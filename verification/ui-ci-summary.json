@@ -1,27 +1,27 @@
 {
-  "commit": "6e02de376101e861ae11d6e0c8bd8259bb0ad11d",
-  "run": "https://github.com/asoming/simple-clipboard/actions/runs/36111279119",
+  "commit": "64498089de79dd03cdf90aff9a6408c6c980f563",
+  "run": "https://github.com/asoming/simple-clipboard/actions/runs/36120527624",
   "conclusion": "success",
   "tests": {
     "linux-x11": {
-      "total": 155,
+      "total": 159,
       "skipped": 9,
-      "passed": 146
+      "passed": 150
     },
     "native (windows-2025, windows-x64)": {
-      "total": 155,
+      "total": 159,
       "skipped": 27,
-      "passed": 128
+      "passed": 132
     },
     "native (macos-14, macos-arm64)": {
-      "total": 155,
+      "total": 159,
       "skipped": 25,
-      "passed": 130
+      "passed": 134
     },
     "native (macos-15-intel, macos-intel)": {
-      "total": 155,
+      "total": 159,
       "skipped": 25,
-      "passed": 130
+      "passed": 134
     }
   },
   "jobs": [
