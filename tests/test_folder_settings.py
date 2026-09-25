@@ -3,6 +3,7 @@
 import sqlite3
 import sys
 import tempfile
+import time
 import traceback
 import unittest
 from contextlib import contextmanager
@@ -325,18 +326,21 @@ class FolderSettingsTests(unittest.TestCase):
             app.processEvents()
             self.assertTrue(page.timer.isActive())
             count = sample.call_count
-            QTest.qWait(20)
+            # Native event loops can coalesce short timers under CI load.
+            deadline = time.monotonic() + 1
+            while sample.call_count == count and time.monotonic() < deadline:
+                QTest.qWait(20)
             self.assertGreater(sample.call_count, count)
             dialog.show_section('general')
             self.assertFalse(page.timer.isActive())
             count = sample.call_count
-            QTest.qWait(20)
+            QTest.qWait(100)
             self.assertEqual(sample.call_count, count)
             dialog.show_section('space')
             dialog.reject()
             self.assertFalse(page.timer.isActive())
             count = sample.call_count
-            QTest.qWait(20)
+            QTest.qWait(100)
             self.assertEqual(sample.call_count, count)
             legacy = StorageDialog(store, panel)
             self.assertFalse(legacy.timer.isActive())

@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from PyQt5.QtCore import QCoreApplication, QEvent, Qt
+from PyQt5.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage
 from PyQt5.QtTest import QSignalSpy, QTest
 from PyQt5.QtWidgets import QApplication, QStyle, QStyleOptionButton, QWidget
@@ -110,12 +110,14 @@ class PreviewTests(unittest.TestCase):
                 pane = PreviewPane(parent)
                 pane.setWindowFlag(Qt.Window)
                 pane.resize(220, 160)
+                pane.move(137, 83)
                 pane.set_clip(text_clip('中文与 English\n' * 40, html='<p>合成网页</p>'))
                 pane.show()
                 app.processEvents()
                 try:
                     self.assertEqual(pane.font(), parent.font())
-                    self.assertTrue(pane.rect().contains(pane.close_button.geometry().translated(pane.close_button.parentWidget().pos())))
+                    close_rect = QRect(pane.close_button.mapTo(pane, QPoint()), pane.close_button.size())
+                    self.assertTrue(pane.rect().contains(close_rect))
                     self.assertLess(pane.close_button.geometry().bottom(), pane.scroll.geometry().top())
                     for label in (pane.metadata, pane.note):
                         self.assertGreaterEqual(label.height(), label.heightForWidth(label.width()))
